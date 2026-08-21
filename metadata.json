@@ -1,0 +1,6 @@
+{
+  "name": "DiffInsight - AI Patch & Diff Analyzer",
+  "description": "Phân tích và đánh giá rủi ro bản vá mã nguồn (Git Diff / Patch) với Google Gemini AI: tóm tắt thay đổi, phân tích nguyên nhân và đánh giá rủi ro bảo mật, hiệu năng.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
