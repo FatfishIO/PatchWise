@@ -66,9 +66,37 @@ export interface SamplePatch {
   diff: string;
 }
 
+export interface GitHubDiffMetadata {
+  type: "pull" | "compare" | "commit" | "unknown";
+  owner?: string;
+  repo?: string;
+  title?: string;
+  author?: string;
+  prNumber?: string | number;
+  commitSha?: string;
+  base?: string;
+  head?: string;
+  url?: string;
+  state?: string;
+}
+
+export type InputMode = "github-url" | "github-range" | "manual";
+
+export interface GitHubUrlParsed {
+  type: "pull" | "compare" | "commit" | "unknown";
+  owner?: string;
+  repo?: string;
+  prNumber?: string;
+  commitSha?: string;
+  base?: string;
+  head?: string;
+  rawUrl: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: number;
 }
+

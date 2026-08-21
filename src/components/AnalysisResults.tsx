@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   DiffAnalysisResult,
   RiskLevel,
+  GitHubDiffMetadata,
 } from "../types";
 import {
   ShieldAlert,
@@ -22,15 +23,20 @@ import {
   Bookmark,
   Info,
   Code2,
+  Github,
+  ExternalLink,
+  GitPullRequest,
 } from "lucide-react";
 
 interface AnalysisResultsProps {
   analysis: DiffAnalysisResult;
   language: "vi" | "en";
+  githubMeta?: GitHubDiffMetadata | null;
 }
 
-export const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysis, language }) => {
+export const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysis, language, githubMeta }) => {
   const [copiedReport, setCopiedReport] = useState(false);
+
   const [expandedSections, setExpandedSections] = useState({
     summary: true,
     intent: true,
@@ -85,8 +91,14 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysis, lang
   const riskTheme = getRiskTheme(analysis.riskLevel);
 
   const handleCopyMarkdownReport = () => {
-    const markdown = `# Báo cáo Phân tích Git Diff - DiffInsight AI
-**Tiêu đề:** ${analysis.headline}
+    const githubSection = githubMeta
+      ? `**Nguồn GitHub:** ${githubMeta.owner}/${githubMeta.repo}${
+          githubMeta.prNumber ? ` (PR #${githubMeta.prNumber})` : ""
+        } - ${githubMeta.url || ""}\n`
+      : "";
+
+    const markdown = `# Báo cáo Phân tích Git Diff - PatchWise AI
+${githubSection}**Tiêu đề:** ${analysis.headline}
 **Mức độ Rủi ro:** ${analysis.riskLevel} (${analysis.riskScore}/10)
 **Loại mục đích:** ${analysis.intentType}
 
@@ -121,7 +133,41 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
 
   return (
     <div className="space-y-4">
+      {/* GitHub Context Badge if available */}
+      {githubMeta && (
+        <div className="px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-between text-xs text-zinc-300">
+          <div className="flex items-center gap-2">
+            <Github className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="font-mono text-zinc-400">
+              {githubMeta.owner}/{githubMeta.repo}
+            </span>
+            {githubMeta.prNumber && (
+              <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-[10px]">
+                PR #{githubMeta.prNumber}
+              </span>
+            )}
+            {githubMeta.title && (
+              <span className="text-zinc-300 font-medium truncate max-w-xs hidden sm:inline">
+                - {githubMeta.title}
+              </span>
+            )}
+          </div>
+          {githubMeta.url && (
+            <a
+              href={githubMeta.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-[11px]"
+            >
+              <span>Xem trên GitHub</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+      )}
+
       {/* Risk Assessment Hero Banner */}
+
       <div
         id="risk-assessment-card"
         className={`p-5 rounded-2xl border ${riskTheme.cardBorder} ${riskTheme.cardBg} bg-zinc-900/90 shadow-xl transition-all`}

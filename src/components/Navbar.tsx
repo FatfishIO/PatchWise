@@ -32,13 +32,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-lg tracking-tight text-white flex items-center gap-1.5">
-                DiffInsight <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono border border-emerald-500/20">AI</span>
+                PatchWise <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono border border-emerald-500/20">AI</span>
               </span>
             </div>
             <p className="text-xs text-zinc-400 hidden sm:block">
               {language === "vi"
-                ? "Phân tích Git Diff, Nguyên nhân & Đánh giá Rủi ro với Gemini AI"
-                : "Smart Git Diff Summarizer, Root Cause & Risk Assessor powered by Gemini"}
+                ? "Diff, Analyze, Secure - Nền tảng phân tích bản vá & rủi ro toàn diện"
+                : "Diff, Analyze, Secure - All-in-one Smart Git Patch & Risk Assessor"}
             </p>
           </div>
         </div>

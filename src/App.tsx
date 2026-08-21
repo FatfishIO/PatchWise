@@ -11,7 +11,7 @@ import { AnalysisResults } from "./components/AnalysisResults";
 import { HistoryDrawer } from "./components/HistoryDrawer";
 import { DiffChat } from "./components/DiffChat";
 import { parseDiffStats, parseDiffDetailed } from "./utils/diffParser";
-import { DiffAnalysisResult, HistoryItem } from "./types";
+import { DiffAnalysisResult, HistoryItem, GitHubDiffMetadata } from "./types";
 import { SAMPLE_PATCHES } from "./data/samplePatches";
 import {
   AlertCircle,
@@ -24,10 +24,19 @@ import {
 } from "lucide-react";
 
 const STORAGE_KEY = "diffinsight_history_v1";
+const GITHUB_TOKEN_KEY = "patchwise_github_token";
 
 export default function App() {
   const [diffContent, setDiffContent] = useState<string>(SAMPLE_PATCHES[0].diff);
   const [analysis, setAnalysis] = useState<DiffAnalysisResult | null>(null);
+  const [githubMeta, setGithubMeta] = useState<GitHubDiffMetadata | null>(null);
+  const [githubToken, setGithubToken] = useState<string>(() => {
+    try {
+      return localStorage.getItem(GITHUB_TOKEN_KEY) || "";
+    } catch {
+      return "";
+    }
+  });
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [focusArea, setFocusArea] = useState<string>("all");
@@ -41,6 +50,20 @@ export default function App() {
       return [];
     }
   });
+
+  // Persist github token
+  const handleSetGithubToken = (token: string) => {
+    setGithubToken(token);
+    try {
+      if (token) {
+        localStorage.setItem(GITHUB_TOKEN_KEY, token);
+      } else {
+        localStorage.removeItem(GITHUB_TOKEN_KEY);
+      }
+    } catch (e) {
+      console.warn("Could not save GitHub token to storage:", e);
+    }
+  };
 
   // Calculate live stats and parsed files
   const stats = useMemo(() => parseDiffStats(diffContent), [diffContent]);
@@ -88,7 +111,7 @@ export default function App() {
       const newHistoryItem: HistoryItem = {
         id: `hist-${Date.now()}`,
         timestamp: Date.now(),
-        title: data.headline || `Patch ${stats.filesCount} file(s)`,
+        title: githubMeta?.title || data.headline || `Patch ${stats.filesCount} file(s)`,
         diffContent,
         analysis: data,
         stats,
@@ -123,8 +146,10 @@ export default function App() {
   const handleClearAll = () => {
     setDiffContent("");
     setAnalysis(null);
+    setGithubMeta(null);
     setError(null);
   };
+
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
@@ -172,6 +197,10 @@ export default function App() {
               focusArea={focusArea}
               setFocusArea={setFocusArea}
               language={language}
+              githubMeta={githubMeta}
+              setGithubMeta={setGithubMeta}
+              githubToken={githubToken}
+              setGithubToken={handleSetGithubToken}
             />
 
             {/* Visual Diff Viewer */}
@@ -186,13 +215,18 @@ export default function App() {
           <div className="lg:col-span-6 space-y-6">
             {analysis ? (
               <>
-                <AnalysisResults analysis={analysis} language={language} />
+                <AnalysisResults
+                  analysis={analysis}
+                  language={language}
+                  githubMeta={githubMeta}
+                />
                 <DiffChat
                   diffContent={diffContent}
                   previousAnalysis={analysis}
                   language={language}
                 />
               </>
+
             ) : isAnalyzing ? (
               /* Loading Analysis Skeleton Animation */
               <div className="p-8 rounded-2xl bg-zinc-900/60 border border-zinc-800 flex flex-col items-center justify-center text-center space-y-4 min-h-[420px]">
