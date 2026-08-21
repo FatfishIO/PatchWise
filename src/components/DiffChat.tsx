@@ -1,17 +1,20 @@
 import React, { useState } from "react";
-import { MessageSquare, Send, Sparkles, Bot, User, CornerDownLeft } from "lucide-react";
-import { ChatMessage, DiffAnalysisResult } from "../types";
+import { MessageSquare, Send, Sparkles, Bot, User, CornerDownLeft, Shield } from "lucide-react";
+import { ChatMessage, DiffAnalysisResult, UserProfile } from "../types";
+import { canUserPerformAction } from "../utils/authUtils";
 
 interface DiffChatProps {
+  currentUser?: UserProfile;
   diffContent: string;
   previousAnalysis: DiffAnalysisResult | null;
   language: "vi" | "en";
 }
 
-export const DiffChat: React.FC<DiffChatProps> = ({ diffContent, previousAnalysis, language }) => {
+export const DiffChat: React.FC<DiffChatProps> = ({ currentUser, diffContent, previousAnalysis, language }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputQuestion, setInputQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const canChat = canUserPerformAction(currentUser?.role, "chat_assistant");
 
   const suggestedQuestions =
     language === "vi"
@@ -167,35 +170,49 @@ export const DiffChat: React.FC<DiffChatProps> = ({ diffContent, previousAnalysi
       </div>
 
       {/* Input row */}
-      <div className="p-3 bg-zinc-900/90 border-t border-zinc-800/80 flex items-center gap-2">
-        <input
-          id="input-diff-chat"
-          type="text"
-          value={inputQuestion}
-          onChange={(e) => setInputQuestion(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSendMessage();
+      {!canChat ? (
+        <div className="p-3 bg-zinc-950 border-t border-zinc-800/80 flex items-center justify-between gap-2 text-xs text-amber-300">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Chế độ Người xem (Viewer):</strong> Bạn chỉ có quyền đọc. Chức năng đặt câu hỏi AI yêu cầu vai trò User hoặc Admin.
+            </span>
+          </div>
+          <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 font-mono text-[10px] uppercase font-bold shrink-0">
+            READ-ONLY
+          </span>
+        </div>
+      ) : (
+        <div className="p-3 bg-zinc-900/90 border-t border-zinc-800/80 flex items-center gap-2">
+          <input
+            id="input-diff-chat"
+            type="text"
+            value={inputQuestion}
+            onChange={(e) => setInputQuestion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+              }
+            }}
+            placeholder={
+              language === "vi"
+                ? "Nhập câu hỏi về bản patch (ví dụ: Viết test case mô phỏng lỗi này)..."
+                : "Ask question about this patch..."
             }
-          }}
-          placeholder={
-            language === "vi"
-              ? "Nhập câu hỏi về bản patch (ví dụ: Viết test case mô phỏng lỗi này)..."
-              : "Ask question about this patch..."
-          }
-          className="flex-1 px-3.5 py-2 text-xs bg-zinc-950 text-zinc-200 placeholder:text-zinc-500 rounded-xl border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans"
-        />
-        <button
-          id="btn-send-chat"
-          onClick={() => handleSendMessage()}
-          disabled={isLoading || !inputQuestion.trim()}
-          className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 text-white disabled:text-zinc-600 transition cursor-pointer"
-          title="Gửi câu hỏi"
-        >
-          <Send className="w-4 h-4" />
-        </button>
-      </div>
+            className="flex-1 px-3.5 py-2 text-xs bg-zinc-950 text-zinc-200 placeholder:text-zinc-500 rounded-xl border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans"
+          />
+          <button
+            id="btn-send-chat"
+            onClick={() => handleSendMessage()}
+            disabled={isLoading || !inputQuestion.trim()}
+            className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 text-white disabled:text-zinc-600 transition cursor-pointer"
+            title="Gửi câu hỏi"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

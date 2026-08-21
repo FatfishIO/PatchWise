@@ -9,6 +9,28 @@
     <meta property="og:description" content="Phân tích Git Diff, tóm tắt thay đổi, phát hiện nguyên nhân gốc rễ và đánh giá rủi ro hệ thống với Gemini AI." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // Ensure window.fetch is safely configurable if injected scripts attempt to wrap or polyfill it
+      try {
+        const originalFetch = window.fetch;
+        if (originalFetch) {
+          let currentFetch = originalFetch;
+          Object.defineProperty(window, 'fetch', {
+            get() {
+              return currentFetch;
+            },
+            set(newFetch) {
+              currentFetch = newFetch;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        }
+      } catch (e) {
+        console.debug('Fetch descriptor initialization handled:', e);
+      }
+    </script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div id="root"></div>

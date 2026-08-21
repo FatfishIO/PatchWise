@@ -26,11 +26,13 @@ import {
   ArrowRight,
   Info,
 } from "lucide-react";
-import { DiffStats, SamplePatch, GitHubDiffMetadata, InputMode } from "../types";
+import { DiffStats, SamplePatch, GitHubDiffMetadata, InputMode, UserProfile } from "../types";
 import { SAMPLE_PATCHES } from "../data/samplePatches";
 import { parseGitHubUrl, SAMPLE_GITHUB_URLS, SampleGitHubUrl } from "../utils/githubUtils";
+import { canUserPerformAction } from "../utils/authUtils";
 
 interface DiffInputProps {
+  currentUser?: UserProfile;
   diffContent: string;
   setDiffContent: (val: string) => void;
   stats: DiffStats;
@@ -46,6 +48,7 @@ interface DiffInputProps {
 }
 
 export const DiffInput: React.FC<DiffInputProps> = ({
+  currentUser,
   diffContent,
   setDiffContent,
   stats,
@@ -322,6 +325,21 @@ export const DiffInput: React.FC<DiffInputProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Viewer Role RBAC Warning Banner */}
+      {currentUser?.role === "viewer" && (
+        <div className="mx-3 mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Chế độ Người xem (Viewer Mode):</strong> Bạn có quyền xem mã diff và các báo cáo phân tích, nhưng <u>không có quyền khởi chạy phân tích AI mới</u>. Vui lòng liên hệ Admin để nâng cấp vai trò.
+            </span>
+          </div>
+          <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 font-mono text-[10px] uppercase font-bold shrink-0 border border-amber-500/30">
+            VIEWER READ-ONLY
+          </span>
+        </div>
+      )}
 
       {/* GitHub Fetched Meta Banner (If diff was fetched via GitHub API) */}
       {githubMeta && (
@@ -771,31 +789,55 @@ diff --git a/services/payment.ts b/services/payment.ts
           </select>
         </div>
 
-        {/* Primary Analyze Button */}
-        <button
-          id="btn-analyze-diff"
-          onClick={onAnalyze}
-          disabled={isAnalyzing || !diffContent.trim()}
-          className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-medium text-sm transition-all shadow-lg cursor-pointer ${
-            isAnalyzing
-              ? "bg-zinc-800 text-zinc-400 cursor-not-allowed"
-              : !diffContent.trim()
-              ? "bg-zinc-800/80 text-zinc-500 cursor-not-allowed border border-zinc-800"
-              : "bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-950/50 hover:shadow-emerald-900/60 active:scale-[0.99]"
-          }`}
-        >
-          {isAnalyzing ? (
-            <>
-              <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-              <span>{language === "vi" ? "Gemini đang phân tích..." : "Gemini is analyzing..."}</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4 text-emerald-200" />
-              <span>{language === "vi" ? "Phân tích bản vá với AI" : "Analyze Patch with AI"}</span>
-            </>
-          )}
-        </button>
+        {/* Primary Analyze Button (Guarded by RBAC permission) */}
+        {(() => {
+          const hasAnalyzePermission = canUserPerformAction(currentUser?.role, "analyze_diff");
+
+          if (!hasAnalyzePermission) {
+            return (
+              <button
+                id="btn-analyze-diff"
+                disabled
+                className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-medium text-xs bg-amber-500/10 text-amber-300 border border-amber-500/30 cursor-not-allowed shadow-md"
+                title="Tài khoản vai trò Viewer chỉ có quyền xem, không thể khởi chạy phân tích mới."
+              >
+                <Shield className="w-4 h-4 text-amber-400" />
+                <span>
+                  {language === "vi"
+                    ? "Viewer: Chỉ được xem (Cần quyền User/Admin)"
+                    : "Viewer Role: Read-only Mode"}
+                </span>
+              </button>
+            );
+          }
+
+          return (
+            <button
+              id="btn-analyze-diff"
+              onClick={onAnalyze}
+              disabled={isAnalyzing || !diffContent.trim()}
+              className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-medium text-sm transition-all shadow-lg cursor-pointer ${
+                isAnalyzing
+                  ? "bg-zinc-800 text-zinc-400 cursor-not-allowed"
+                  : !diffContent.trim()
+                  ? "bg-zinc-800/80 text-zinc-500 cursor-not-allowed border border-zinc-800"
+                  : "bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-950/50 hover:shadow-emerald-900/60 active:scale-[0.99]"
+              }`}
+            >
+              {isAnalyzing ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                  <span>{language === "vi" ? "Gemini đang phân tích..." : "Gemini is analyzing..."}</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-emerald-200" />
+                  <span>{language === "vi" ? "Phân tích bản vá với AI" : "Analyze Patch with AI"}</span>
+                </>
+              )}
+            </button>
+          );
+        })()}
       </div>
 
       {/* GitHub Token Configuration Modal */}

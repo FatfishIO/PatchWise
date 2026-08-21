@@ -267,8 +267,13 @@ ${diffContent}
 
 Trọng tâm bổ sung: ${focusArea === "security" ? "Tập trung sâu vào khía cạnh Bảo mật & Lỗ hổng" : focusArea === "performance" ? "Tập trung sâu vào Hiệu năng & Tối ưu hóa bộ nhớ/tài nguyên" : focusArea === "reliability" ? "Tập trung sâu vào Độ ổn định, Xử lý lỗi & Tương thích ngược" : "Toàn diện (Tóm tắt, Nguyên nhân, Rủi ro, Bảo mật, Hiệu năng, Khuyến nghị)"}.`;
 
-    // Call Gemini with fallback between 3.7-flash and 3.6-flash
-    const candidateModels = ["gemini-3.7-flash", "gemini-3.6-flash"];
+    // Call Gemini with fallback across fast, high-quota models
+    const candidateModels = [
+      "gemini-3.1-flash-lite",
+      "gemini-3.1-flash-lite-preview",
+      "gemini-3.7-flash",
+      "gemini-flash-latest",
+    ];
     let rawText: string | undefined;
     let lastError: any = null;
 
@@ -411,7 +416,7 @@ Trọng tâm bổ sung: ${focusArea === "security" ? "Tập trung sâu vào khí
           lastError = err;
           console.warn(`Model ${model} attempt ${attempt} failed:`, err?.message);
           if (attempt < 2) {
-            await new Promise((r) => setTimeout(r, 1000));
+            await new Promise((r) => setTimeout(r, 800));
           }
         }
       }
@@ -419,6 +424,12 @@ Trọng tâm bổ sung: ${focusArea === "security" ? "Tập trung sâu vào khí
     }
 
     if (!rawText) {
+      const errMsg = lastError?.message || "";
+      if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota")) {
+        throw new Error(
+          "Hạn ngạch gọi API AI tạm thời đạt giới hạn (Quota / Rate Limit Exceeded). Vui lòng thử lại sau ít phút."
+        );
+      }
       throw lastError || new Error("Không nhận được phản hồi từ AI model.");
     }
 
@@ -463,7 +474,12 @@ ${chatHistory.map((m: any) => `${m.role === "user" ? "User" : "AI"}: ${m.content
 Câu hỏi của người dùng:
 ${question}`;
 
-    const candidateModels = ["gemini-3.7-flash", "gemini-3.6-flash"];
+    const candidateModels = [
+      "gemini-3.1-flash-lite",
+      "gemini-3.1-flash-lite-preview",
+      "gemini-3.7-flash",
+      "gemini-flash-latest",
+    ];
     let answerText: string | undefined;
     let lastError: any = null;
 
@@ -484,7 +500,7 @@ ${question}`;
           lastError = err;
           console.warn(`Chat model ${model} attempt ${attempt} failed:`, err?.message);
           if (attempt < 2) {
-            await new Promise((r) => setTimeout(r, 1000));
+            await new Promise((r) => setTimeout(r, 800));
           }
         }
       }
@@ -492,6 +508,12 @@ ${question}`;
     }
 
     if (!answerText) {
+      const errMsg = lastError?.message || "";
+      if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota")) {
+        throw new Error(
+          "Hạn ngạch gọi API AI tạm thời đạt giới hạn (Quota / Rate Limit Exceeded). Vui lòng thử lại sau ít phút."
+        );
+      }
       throw lastError || new Error("Không nhận được câu trả lời từ AI model.");
     }
 

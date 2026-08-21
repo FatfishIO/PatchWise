@@ -10,9 +10,18 @@ import { DiffViewer } from "./components/DiffViewer";
 import { AnalysisResults } from "./components/AnalysisResults";
 import { HistoryDrawer } from "./components/HistoryDrawer";
 import { DiffChat } from "./components/DiffChat";
+import { LoginScreen } from "./components/LoginScreen";
+import { AdminDashboard } from "./components/AdminDashboard";
 import { parseDiffStats, parseDiffDetailed } from "./utils/diffParser";
-import { DiffAnalysisResult, HistoryItem, GitHubDiffMetadata } from "./types";
+import { DiffAnalysisResult, HistoryItem, GitHubDiffMetadata, UserProfile, UserRole } from "./types";
 import { SAMPLE_PATCHES } from "./data/samplePatches";
+import {
+  getStoredSession,
+  saveSession,
+  clearSession,
+  canUserPerformAction,
+  updateUserRole,
+} from "./utils/authUtils";
 import {
   AlertCircle,
   Sparkles,
@@ -27,6 +36,13 @@ const STORAGE_KEY = "diffinsight_history_v1";
 const GITHUB_TOKEN_KEY = "patchwise_github_token";
 
 export default function App() {
+  // Authentication & RBAC Session State
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    const session = getStoredSession();
+    return session ? session.user : null;
+  });
+  const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState<boolean>(false);
+
   const [diffContent, setDiffContent] = useState<string>(SAMPLE_PATCHES[0].diff);
   const [analysis, setAnalysis] = useState<DiffAnalysisResult | null>(null);
   const [githubMeta, setGithubMeta] = useState<GitHubDiffMetadata | null>(null);
@@ -78,8 +94,44 @@ export default function App() {
     }
   }, [history]);
 
-  // Handle diff analysis
+  // Handle Login & Logout
+  const handleLoginSuccess = (user: UserProfile) => {
+    setCurrentUser(user);
+    setError(null);
+  };
+
+  const handleSignOut = () => {
+    clearSession();
+    setCurrentUser(null);
+    try {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.disableAutoSelect();
+      }
+    } catch (e) {
+      console.debug("Google auto-select disable:", e);
+    }
+  };
+
+  // Quick Role Switcher (for testing demo perspectives)
+  const handleSwitchRole = (newRole: UserRole) => {
+    if (!currentUser) return;
+    const updated = { ...currentUser, role: newRole };
+    setCurrentUser(updated);
+    saveSession(updated);
+    updateUserRole(currentUser.email, currentUser.email, newRole);
+  };
+
+  // Handle diff analysis (guarded by RBAC permission)
   const handleAnalyze = async () => {
+    if (!canUserPerformAction(currentUser?.role, "analyze_diff")) {
+      setError(
+        language === "vi"
+          ? "Bạn không có quyền thực hiện phân tích mới (Vai trò VIEWER). Vui lòng liên hệ Admin."
+          : "You do not have permission to initiate diff analysis (VIEWER role). Please contact Admin."
+      );
+      return;
+    }
+
     if (!diffContent.trim()) {
       setError(language === "vi" ? "Vui lòng nhập hoặc dán nội dung patch/diff." : "Please enter or paste a diff.");
       return;
@@ -150,28 +202,36 @@ export default function App() {
     setError(null);
   };
 
+  // If user is unauthenticated, render the modern Google Sign-In & Auth Screen
+  if (!currentUser) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} language={language} />;
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
-      {/* Top Navigation */}
+      {/* Top Navigation Bar with User Profile & RBAC Controls */}
       <Navbar
+        currentUser={currentUser}
         onOpenHistory={() => setIsHistoryOpen(true)}
         historyCount={history.length}
         onClear={handleClearAll}
         hasContent={Boolean(diffContent.trim() || analysis)}
         language={language}
         setLanguage={setLanguage}
+        onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
+        onSignOut={handleSignOut}
+        onSwitchRole={handleSwitchRole}
       />
 
       {/* Main Workspace */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 lg:p-6 space-y-6">
         {/* Error Alert */}
         {error && (
           <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/80 text-rose-200 flex items-start gap-3 text-xs leading-relaxed animate-in fade-in">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
             <div className="flex-1">
               <span className="font-semibold text-rose-300">
-                {language === "vi" ? "Lỗi phân tích: " : "Analysis error: "}
+                {language === "vi" ? "Thông báo: " : "Notice: "}
               </span>
               <span>{error}</span>
             </div>
@@ -189,6 +249,7 @@ export default function App() {
           {/* Left Column: Input & Visual Diff Viewer */}
           <div className="lg:col-span-6 space-y-6">
             <DiffInput
+              currentUser={currentUser}
               diffContent={diffContent}
               setDiffContent={setDiffContent}
               stats={stats}
@@ -221,12 +282,12 @@ export default function App() {
                   githubMeta={githubMeta}
                 />
                 <DiffChat
+                  currentUser={currentUser}
                   diffContent={diffContent}
                   previousAnalysis={analysis}
                   language={language}
                 />
               </>
-
             ) : isAnalyzing ? (
               /* Loading Analysis Skeleton Animation */
               <div className="p-8 rounded-2xl bg-zinc-900/60 border border-zinc-800 flex flex-col items-center justify-center text-center space-y-4 min-h-[420px]">
@@ -330,6 +391,21 @@ export default function App() {
         onClearAllHistory={handleClearAllHistory}
         language={language}
       />
+
+      {/* RBAC Admin Dashboard Modal (Accessible only to Admins) */}
+      {currentUser.role === "admin" && (
+        <AdminDashboard
+          currentUser={currentUser}
+          isOpen={isAdminDashboardOpen}
+          onClose={() => setIsAdminDashboardOpen(false)}
+          language={language}
+          onUserUpdated={(updatedUser) => {
+            if (updatedUser.email.toLowerCase() === currentUser.email.toLowerCase()) {
+              setCurrentUser(updatedUser);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

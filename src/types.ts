@@ -100,3 +100,46 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+// ==========================================
+// Authentication & Role-Based Access Control (RBAC)
+// ==========================================
+
+export type UserRole = "admin" | "user" | "viewer";
+
+export interface UserProfile {
+  id: string;
+  sub?: string;
+  email: string;
+  name: string;
+  picture?: string;
+  role: UserRole;
+  authProvider: "google" | "demo" | "custom";
+  lastLoginAt: number;
+  createdAt: number;
+}
+
+export interface AuthSession {
+  user: UserProfile;
+  token?: string;
+  expiresAt: number;
+}
+
+export type RBACAction =
+  | "analyze_diff"
+  | "view_results"
+  | "manage_users"
+  | "chat_assistant"
+  | "fetch_github"
+  | "export_report"
+  | "clear_history";
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: number;
+  actorEmail: string;
+  action: string;
+  targetEmail?: string;
+  details: string;
+  severity?: "info" | "warning" | "security";
+}
+
