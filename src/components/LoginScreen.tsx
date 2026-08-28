@@ -447,7 +447,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
 
       {/* Footer Note */}
       <footer className="border-t border-zinc-900 py-3 px-6 text-center text-xs text-zinc-500">
-        <span>PatchWise AI • Phân tích Git Patch & Đánh giá Rủi ro • Hỗ trợ Google Identity Services & RBAC</span>
+        <span>PatchWise AI • Phân tích Git Patch & Đánh giá Rủi ro</span>
       </footer>
 
       {/* Google OAuth Client ID Configuration Modal */}
