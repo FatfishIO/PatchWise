@@ -3,6 +3,8 @@ import {
   DiffAnalysisResult,
   RiskLevel,
   GitHubDiffMetadata,
+  PotentialRisk,
+  FixSuggestion,
 } from "../types";
 import {
   ShieldAlert,
@@ -26,16 +28,34 @@ import {
   Github,
   ExternalLink,
   GitPullRequest,
+  Printer,
+  FileText,
+  Wrench,
 } from "lucide-react";
+import { FixSuggestionModal } from "./FixSuggestionModal";
+import { ReportPdfModal } from "./ReportPdfModal";
 
 interface AnalysisResultsProps {
   analysis: DiffAnalysisResult;
   language: "vi" | "en";
   githubMeta?: GitHubDiffMetadata | null;
+  rawDiff?: string;
 }
 
-export const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysis, language, githubMeta }) => {
+export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
+  analysis,
+  language,
+  githubMeta,
+  rawDiff,
+}) => {
   const [copiedReport, setCopiedReport] = useState(false);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+
+  // Auto-Fix state
+  const [selectedRisk, setSelectedRisk] = useState<PotentialRisk | null>(null);
+  const [fixSuggestion, setFixSuggestion] = useState<FixSuggestion | null>(null);
+  const [isFixModalOpen, setIsFixModalOpen] = useState(false);
+  const [isFixLoading, setIsFixLoading] = useState(false);
 
   const [expandedSections, setExpandedSections] = useState({
     summary: true,
@@ -50,6 +70,34 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysis, lang
       ...prev,
       [section]: !prev[section],
     }));
+  };
+
+  const handleRequestFix = async (risk: PotentialRisk) => {
+    setSelectedRisk(risk);
+    setIsFixModalOpen(true);
+    setIsFixLoading(true);
+    setFixSuggestion(null);
+
+    try {
+      const res = await fetch("/api/analyze/fix-suggestion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          riskDescription: risk.description,
+          riskCategory: risk.category,
+          diffContext: rawDiff || analysis.summary,
+          language,
+        }),
+      });
+      const data = await res.json();
+      if (data.fix) {
+        setFixSuggestion(data.fix);
+      }
+    } catch (e) {
+      console.error("Fix suggestion error:", e);
+    } finally {
+      setIsFixLoading(false);
+    }
   };
 
   const getRiskTheme = (level: RiskLevel) => {
@@ -192,37 +240,47 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
             </div>
           </div>
 
-          {/* Risk Score Gauge & Export Action */}
-          <div className="flex items-center gap-3 self-end sm:self-center">
-            <div className="text-right">
-              <div className="text-[11px] text-zinc-400 font-mono">
-                {language === "vi" ? "Điểm Rủi ro" : "Risk Score"}
+            {/* Risk Score Gauge & Export Actions */}
+            <div className="flex flex-wrap items-center gap-2 self-end sm:self-center">
+              <div className="text-right mr-2">
+                <div className="text-[11px] text-zinc-400 font-mono">
+                  {language === "vi" ? "Điểm Rủi ro" : "Risk Score"}
+                </div>
+                <div className="text-xl font-mono font-black text-white flex items-baseline justify-end gap-1">
+                  <span>{analysis.riskScore}</span>
+                  <span className="text-xs text-zinc-500 font-normal">/10</span>
+                </div>
               </div>
-              <div className="text-xl font-mono font-black text-white flex items-baseline justify-end gap-1">
-                <span>{analysis.riskScore}</span>
-                <span className="text-xs text-zinc-500 font-normal">/10</span>
-              </div>
-            </div>
 
-            <button
-              id="btn-copy-report"
-              onClick={handleCopyMarkdownReport}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 text-xs transition cursor-pointer"
-              title="Sao chép toàn bộ báo cáo phân tích dạng Markdown"
-            >
-              {copiedReport ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-400">{language === "vi" ? "Đã chép" : "Copied"}</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5 text-zinc-400" />
-                  <span>{language === "vi" ? "Xuất Markdown" : "Export Report"}</span>
-                </>
-              )}
-            </button>
-          </div>
+              <button
+                id="btn-print-pdf-report"
+                onClick={() => setIsPdfModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 text-xs transition cursor-pointer"
+                title="Mở bản in báo cáo kiểm toán & xuất PDF"
+              >
+                <Printer className="w-3.5 h-3.5 text-indigo-400" />
+                <span>{language === "vi" ? "In / PDF" : "Print PDF"}</span>
+              </button>
+
+              <button
+                id="btn-copy-report"
+                onClick={handleCopyMarkdownReport}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 text-xs transition cursor-pointer"
+                title="Sao chép toàn bộ báo cáo phân tích dạng Markdown"
+              >
+                {copiedReport ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-400">{language === "vi" ? "Đã chép" : "Copied"}</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>{language === "vi" ? "Xuất MD" : "Export MD"}</span>
+                  </>
+                )}
+              </button>
+            </div>
         </div>
 
         {/* Risk meter progress bar */}
@@ -418,7 +476,7 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
                 return (
                   <div
                     key={idx}
-                    className={`p-3 rounded-xl border flex items-start gap-3 transition-colors ${
+                    className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-start justify-between gap-3 transition-colors ${
                       isHigh
                         ? "bg-rose-950/20 border-rose-800/40 text-rose-200"
                         : isMed
@@ -426,20 +484,31 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
                         : "bg-zinc-900/80 border-zinc-800 text-zinc-200"
                     }`}
                   >
-                    <span
-                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase shrink-0 mt-0.5 border ${
-                        isHigh
-                          ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
-                          : isMed
-                          ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                          : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                      }`}
+                    <div className="flex items-start gap-2.5 flex-1">
+                      <span
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase shrink-0 mt-0.5 border ${
+                          isHigh
+                            ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                            : isMed
+                            ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                            : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                        }`}
+                      >
+                        {risk.category}
+                      </span>
+                      <p className="text-xs leading-relaxed flex-1 text-zinc-200 font-sans">
+                        {risk.description}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => handleRequestFix(risk)}
+                      className="self-end sm:self-start flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-medium transition cursor-pointer shrink-0 shadow-sm"
+                      title="Yêu cầu AI tạo đoạn mã đã khắc phục và unit test"
                     >
-                      {risk.category}
-                    </span>
-                    <p className="text-xs leading-relaxed flex-1 text-zinc-200 font-sans">
-                      {risk.description}
-                    </p>
+                      <Sparkles className="w-3 h-3 text-emerald-400" />
+                      <span>{language === "vi" ? "Đề xuất Fix" : "Suggest Fix"}</span>
+                    </button>
                   </div>
                 );
               })
@@ -537,6 +606,26 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
           )}
         </div>
       )}
+
+      {/* PDF Export & Print Modal */}
+      <ReportPdfModal
+        isOpen={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
+        analysis={analysis}
+        prTitle={githubMeta?.title || analysis.headline}
+        language={language}
+      />
+
+      {/* Auto-Fix Code Suggestion Modal */}
+      <FixSuggestionModal
+        isOpen={isFixModalOpen}
+        onClose={() => setIsFixModalOpen(false)}
+        risk={selectedRisk}
+        suggestion={fixSuggestion}
+        isLoading={isFixLoading}
+        language={language}
+        diffContent={rawDiff}
+      />
     </div>
   );
 };

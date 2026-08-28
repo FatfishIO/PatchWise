@@ -12,6 +12,8 @@ import { HistoryDrawer } from "./components/HistoryDrawer";
 import { DiffChat } from "./components/DiffChat";
 import { LoginScreen } from "./components/LoginScreen";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { WebhookSettingsModal } from "./components/WebhookSettingsModal";
+import { CompareViewModal } from "./components/CompareViewModal";
 import { parseDiffStats, parseDiffDetailed } from "./utils/diffParser";
 import { DiffAnalysisResult, HistoryItem, GitHubDiffMetadata, UserProfile, UserRole } from "./types";
 import { SAMPLE_PATCHES } from "./data/samplePatches";
@@ -42,6 +44,8 @@ export default function App() {
     return session ? session.user : null;
   });
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState<boolean>(false);
+  const [isWebhookModalOpen, setIsWebhookModalOpen] = useState<boolean>(false);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false);
 
   const [diffContent, setDiffContent] = useState<string>(SAMPLE_PATCHES[0].diff);
   const [analysis, setAnalysis] = useState<DiffAnalysisResult | null>(null);
@@ -221,6 +225,8 @@ export default function App() {
         onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
         onSignOut={handleSignOut}
         onSwitchRole={handleSwitchRole}
+        onOpenWebhookSettings={() => setIsWebhookModalOpen(true)}
+        onOpenCompare={() => setIsCompareModalOpen(true)}
       />
 
       {/* Main Workspace */}
@@ -280,6 +286,7 @@ export default function App() {
                   analysis={analysis}
                   language={language}
                   githubMeta={githubMeta}
+                  rawDiff={diffContent}
                 />
                 <DiffChat
                   currentUser={currentUser}
@@ -389,6 +396,36 @@ export default function App() {
         onSelectHistory={handleSelectHistory}
         onDeleteHistoryItem={handleDeleteHistoryItem}
         onClearAllHistory={handleClearAllHistory}
+        language={language}
+      />
+
+      {/* Webhook CI/CD Integration Modal */}
+      <WebhookSettingsModal
+        isOpen={isWebhookModalOpen}
+        onClose={() => setIsWebhookModalOpen(false)}
+        language={language}
+        currentUser={currentUser}
+      />
+
+      {/* Cross Compare PRs Modal */}
+      <CompareViewModal
+        isOpen={isCompareModalOpen}
+        onClose={() => setIsCompareModalOpen(false)}
+        historyItems={history}
+        currentHistoryItem={
+          analysis
+            ? {
+                id: "current",
+                timestamp: Date.now(),
+                title: githubMeta?.title || analysis.headline,
+                riskLevel: analysis.riskLevel,
+                rawDiff: diffContent,
+                stats,
+                analysis,
+                githubMeta: githubMeta || undefined,
+              }
+            : null
+        }
         language={language}
       />
 

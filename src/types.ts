@@ -1,4 +1,4 @@
-export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
+export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type IntentType =
   | "Bug Fix"
@@ -55,6 +55,7 @@ export interface HistoryItem {
   analysis: DiffAnalysisResult;
   stats: DiffStats;
   riskLevel: RiskLevel;
+  githubMeta?: GitHubDiffMetadata | null;
 }
 
 export interface SamplePatch {
@@ -131,7 +132,9 @@ export type RBACAction =
   | "chat_assistant"
   | "fetch_github"
   | "export_report"
-  | "clear_history";
+  | "clear_history"
+  | "manage_webhooks"
+  | "view_analytics";
 
 export interface AuditLogEntry {
   id: string;
@@ -142,4 +145,133 @@ export interface AuditLogEntry {
   details: string;
   severity?: "info" | "warning" | "security";
 }
+
+// ==========================================
+// 1. Webhook CI/CD Integration Types
+// ==========================================
+
+export interface WebhookConfig {
+  id: string;
+  userId?: string;
+  repoUrl: string;
+  repoOwner: string;
+  repoName: string;
+  githubWebhookId?: number;
+  secret: string;
+  isActive: boolean;
+  autoComment: boolean;
+  createdAt: number;
+  lastTriggeredAt?: number;
+  lastStatus?: "success" | "failed" | "pending";
+}
+
+export interface WebhookLog {
+  id: string;
+  webhookId: string;
+  repoUrl: string;
+  eventType: string;
+  prNumber: number;
+  prTitle?: string;
+  prAuthor?: string;
+  status: "success" | "failed";
+  errorMessage?: string;
+  analysisSummary?: string;
+  riskLevel?: RiskLevel;
+  commentUrl?: string;
+  createdAt: number;
+}
+
+// ==========================================
+// 2. Admin Usage Analytics Types
+// ==========================================
+
+export interface AnalyticsOverview {
+  total_users: number;
+  active_users_last_30d: number;
+  total_analyses: number;
+  total_tokens_used: number;
+  estimated_cost: number;
+  avg_response_time_ms: number;
+}
+
+export interface TrendDataPoint {
+  date: string;
+  analyses: number;
+  tokens: number;
+  cost: number;
+}
+
+export interface TopUserStat {
+  email: string;
+  name: string;
+  role: UserRole;
+  analyses_count: number;
+  tokens_used: number;
+  avg_risk_score: number;
+  last_active: number;
+}
+
+export interface RiskDistributionItem {
+  name: string;
+  count: number;
+  percentage: number;
+  color: string;
+}
+
+export interface RepoStatItem {
+  repo: string;
+  owner: string;
+  analysesCount: number;
+  avgRiskScore: number;
+  lastAnalyzed: number;
+}
+
+// ==========================================
+// 3. AI Streaming & Auto-Fix Suggestion Types
+// ==========================================
+
+export interface StreamProgressChunk {
+  type: "start" | "summary" | "root_cause" | "risk" | "test_cases" | "done" | "error";
+  content?: string;
+  progress: number;
+  partialData?: Partial<DiffAnalysisResult>;
+}
+
+export interface FixSuggestion {
+  id?: string;
+  vulnerabilityType: string;
+  category: string;
+  description: string;
+  originalCodeSnippet?: string;
+  suggestedCode: string;
+  explanation: string;
+  testCode: string;
+  confidenceScore: number;
+  wasApplied?: boolean;
+}
+
+// ==========================================
+// 4. Compare Mode Types
+// ==========================================
+
+export interface ComparePRItem {
+  id: string;
+  title: string;
+  source: string; // e.g. "PR #101" or "branch: feature-a"
+  diffContent: string;
+  analysis: DiffAnalysisResult;
+  stats: DiffStats;
+  riskScore: number;
+  riskLevel: RiskLevel;
+}
+
+export interface PRComparisonAnalysis {
+  recommendation: "PR_A" | "PR_B" | "BOTH_SAFE" | "NEITHER_SAFE";
+  rationale: string;
+  saferPRTitle: string;
+  timeToFixEstimateA: string;
+  timeToFixEstimateB: string;
+  keyDifferences: string[];
+}
+
 

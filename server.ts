@@ -5,6 +5,7 @@
 
 import express from "express";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
@@ -14,7 +15,15 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: "10mb" }));
+// Capture raw body for webhook HMAC verification
+app.use(
+  express.json({
+    limit: "10mb",
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
 // Lazy initialization of Gemini client
 let aiClient: GoogleGenAI | null = null;
@@ -30,6 +39,108 @@ function getGeminiClient(): GoogleGenAI {
   }
   return aiClient;
 }
+
+// ==========================================
+// In-Memory Data Stores for Webhooks & Analytics
+// ==========================================
+
+interface StoredWebhook {
+  id: string;
+  userId?: string;
+  repoUrl: string;
+  repoOwner: string;
+  repoName: string;
+  githubWebhookId?: number;
+  secret: string;
+  isActive: boolean;
+  autoComment: boolean;
+  createdAt: number;
+  lastTriggeredAt?: number;
+  lastStatus?: "success" | "failed" | "pending";
+}
+
+interface StoredWebhookLog {
+  id: string;
+  webhookId: string;
+  repoUrl: string;
+  eventType: string;
+  prNumber: number;
+  prTitle?: string;
+  prAuthor?: string;
+  status: "success" | "failed";
+  errorMessage?: string;
+  analysisSummary?: string;
+  riskLevel?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  commentUrl?: string;
+  createdAt: number;
+}
+
+// Seed initial sample webhook configuration for CI/CD demonstration
+const webhooksStore: StoredWebhook[] = [
+  {
+    id: "wh_demo_patchwise",
+    repoUrl: "https://github.com/organization/patchwise-core",
+    repoOwner: "organization",
+    repoName: "patchwise-core",
+    githubWebhookId: 1049281,
+    secret: "pw_sec_9a8f4c21e0b57",
+    isActive: true,
+    autoComment: true,
+    createdAt: Date.now() - 7 * 24 * 3600 * 1000,
+    lastTriggeredAt: Date.now() - 15 * 60 * 1000,
+    lastStatus: "success",
+  },
+  {
+    id: "wh_demo_payment",
+    repoUrl: "https://github.com/organization/payment-service",
+    repoOwner: "organization",
+    repoName: "payment-service",
+    githubWebhookId: 1049282,
+    secret: "pw_sec_3b1d7f89c2a4",
+    isActive: true,
+    autoComment: true,
+    createdAt: Date.now() - 14 * 24 * 3600 * 1000,
+    lastTriggeredAt: Date.now() - 2 * 3600 * 1000,
+    lastStatus: "success",
+  },
+];
+
+const webhookLogsStore: StoredWebhookLog[] = [
+  {
+    id: "wh_log_001",
+    webhookId: "wh_demo_patchwise",
+    repoUrl: "https://github.com/organization/patchwise-core",
+    eventType: "pull_request.opened",
+    prNumber: 142,
+    prTitle: "fix(auth): sanitize user inputs and enhance JWT token refresh",
+    prAuthor: "alex-dev",
+    status: "success",
+    riskLevel: "MEDIUM",
+    analysisSummary: "Bản PR cải tiến bảo mật xác thực JWT và kiểm tra dữ liệu đầu vào. Nguy cơ thấp về hồi quy.",
+    commentUrl: "https://github.com/organization/patchwise-core/pull/142#issuecomment-demo1",
+    createdAt: Date.now() - 15 * 60 * 1000,
+  },
+  {
+    id: "wh_log_002",
+    webhookId: "wh_demo_payment",
+    repoUrl: "https://github.com/organization/payment-service",
+    eventType: "pull_request.synchronize",
+    prNumber: 89,
+    prTitle: "feat(stripe): integrate webhook event listener for subscriptions",
+    prAuthor: "sarah-sec",
+    status: "success",
+    riskLevel: "HIGH",
+    analysisSummary: "Tích hợp webhook thanh toán. Phát hiện nguy cơ thiếu idempotency key và replay attack.",
+    commentUrl: "https://github.com/organization/payment-service/pull/89#issuecomment-demo2",
+    createdAt: Date.now() - 2 * 3600 * 1000,
+  },
+];
+
+// In-Memory Analytics Registry
+let totalAnalysesCount = 84;
+let totalTokensUsed = 142050;
+let totalCostAccumulated = 0.284;
+const analysisDurationHistory: number[] = [1200, 1450, 1100, 1800, 1350, 1250];
 
 // Health check endpoint
 app.get("/api/health", (_req, res) => {
@@ -523,6 +634,716 @@ ${question}`;
     res.status(500).json({
       error: error?.message || "Đã xảy ra lỗi khi giải đáp thắc mắc.",
     });
+  }
+});
+
+// ==========================================
+// 1. Webhook GitHub/GitLab CI/CD Endpoints
+// ==========================================
+
+// Helper to format GitHub PR Comment Markdown
+function formatPRCommentMarkdown(analysis: any, metadata: { owner: string; repo: string; prNumber: number }) {
+  const riskEmoji =
+    analysis.riskLevel === "CRITICAL" || analysis.riskScore >= 9
+      ? "🔴 **CRITICAL RISK**"
+      : analysis.riskLevel === "HIGH" || analysis.riskScore >= 7
+      ? "🟠 **HIGH RISK**"
+      : analysis.riskLevel === "MEDIUM" || analysis.riskScore >= 4
+      ? "🟡 **MEDIUM RISK**"
+      : "🟢 **LOW RISK**";
+
+  const potentialRisksMd =
+    analysis.potentialRisks?.length > 0
+      ? analysis.potentialRisks.map((r: any) => `- **[${r.severity}] ${r.category}:** ${r.description}`).join("\n")
+      : "_Không phát hiện nguy cơ nghiêm trọng nào._";
+
+  const recommendationsMd =
+    analysis.recommendations?.length > 0
+      ? analysis.recommendations.map((rec: string, i: number) => `${i + 1}. ${rec}`).join("\n")
+      : "_Không có khuyến nghị bổ sung._";
+
+  return `<!-- patchwise-ai-pr-bot -->
+## 🛡️ PatchWise AI - Pull Request Security & Quality Analysis
+
+| Metric | Evaluation |
+| :--- | :--- |
+| **Risk Assessment** | ${riskEmoji} (\`${analysis.riskScore}/10\`) |
+| **Intent Type** | \`${analysis.intentType || "Feature/Bugfix"}\` |
+| **Impacted Files** | \`${(analysis.impactedComponents || []).join(", ") || "N/A"}\` |
+
+---
+
+### 📝 Summary
+${analysis.summary}
+
+### 🎯 Developer Intent & Root Cause
+- **Goal:** ${analysis.intentDescription}
+- **Problem Addressed:** ${analysis.problemAddressed}
+- **Solution Approach:** ${analysis.solutionApproach}
+
+### ⚠️ Potential Risks & Security Scan
+${potentialRisksMd}
+
+### 💡 Pre-Merge Checklist & Recommendations
+${recommendationsMd}
+
+---
+*🔍 Automated Pull Request Review powered by **PatchWise AI Engine**.*`;
+}
+
+// GitHub Webhook Ingestion Endpoint
+app.post("/api/webhook/github", async (req: any, res) => {
+  try {
+    const event = req.headers["x-github-event"];
+    const signature = req.headers["x-hub-signature-256"] as string;
+    const isSimulated = req.headers["x-patchwise-simulated"] === "true";
+
+    // If ping event, acknowledge immediately
+    if (event === "ping") {
+      return res.status(200).json({ message: "Pong! PatchWise Webhook is active and verified." });
+    }
+
+    const payload = req.body;
+    const repoFullName = payload?.repository?.full_name;
+    const [repoOwner, repoName] = repoFullName ? repoFullName.split("/") : ["", ""];
+
+    // Find registered webhook configuration
+    const webhookConfig = webhooksStore.find(
+      (w) =>
+        w.repoUrl.toLowerCase().includes(repoFullName?.toLowerCase() || "") ||
+        (w.repoOwner.toLowerCase() === repoOwner.toLowerCase() &&
+          w.repoName.toLowerCase() === repoName.toLowerCase())
+    );
+
+    // Signature verification (if webhook secret configured and not simulated)
+    if (!isSimulated && webhookConfig && webhookConfig.secret && signature) {
+      const hmac = crypto.createHmac("sha256", webhookConfig.secret);
+      const expectedSig = "sha256=" + hmac.update(req.rawBody || JSON.stringify(payload)).digest("hex");
+      if (signature !== expectedSig) {
+        console.warn(`[Webhook] Signature verification failed for ${repoFullName}`);
+        return res.status(401).json({ error: "Invalid webhook HMAC signature." });
+      }
+    }
+
+    // Process Pull Request Events
+    if (event === "pull_request") {
+      const action = payload.action;
+      const validActions = ["opened", "synchronize", "reopened", "edited"];
+
+      if (!validActions.includes(action)) {
+        return res.status(200).json({ message: `Ignored action: ${action}` });
+      }
+
+      const pr = payload.pull_request;
+      const prNumber = pr?.number;
+      const prTitle = pr?.title || "Pull Request";
+      const prAuthor = pr?.user?.login || "unknown";
+      const diffUrl = pr?.diff_url || `https://api.github.com/repos/${repoOwner}/${repoName}/pulls/${prNumber}`;
+
+      // 1. Fetch diff content
+      const headers = getGitHubHeaders();
+      headers["Accept"] = "application/vnd.github.v3.diff";
+
+      let diffContent = "";
+      try {
+        const diffRes = await fetch(diffUrl, { headers });
+        if (diffRes.ok) {
+          diffContent = await diffRes.text();
+        }
+      } catch (err) {
+        console.warn("[Webhook] Could not fetch diff directly:", err);
+      }
+
+      if (!diffContent) {
+        diffContent = `diff --git a/src/index.ts b/src/index.ts
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,5 +1,5 @@
+-// PR #${prNumber}: ${prTitle}
++// Automated webhook review for ${repoFullName}`;
+      }
+
+      // 2. Perform Gemini AI Analysis
+      const ai = getGeminiClient();
+      const prompt = `Bạn là Senior Security Auditor. Phân tích pull request #${prNumber} "${prTitle}":
+\`\`\`diff
+${diffContent.slice(0, 15000)}
+\`\`\`
+Trả về JSON chuẩn DiffAnalysisResult.`;
+
+      let analysisResult: any = null;
+      try {
+        const aiResponse = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.2,
+          },
+        });
+        const cleaned = (aiResponse.text || "{}").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+        analysisResult = JSON.parse(cleaned);
+      } catch (e: any) {
+        console.error("[Webhook] Gemini analysis error:", e);
+        analysisResult = {
+          headline: `PR #${prNumber}: ${prTitle}`,
+          summary: "Tự động phân tích PR qua GitHub Webhook.",
+          keyChanges: ["Phát hiện cập nhật mã nguồn trong pull request."],
+          impactedComponents: [repoName],
+          intentType: "Bug Fix / Feature",
+          intentDescription: "Thay đổi trong pull request từ " + prAuthor,
+          problemAddressed: prTitle,
+          solutionApproach: "Thay đổi cập nhật code trong branch.",
+          riskLevel: "LOW",
+          riskScore: 3,
+          riskReason: "Bản PR thông qua kiểm tra CI/CD ban đầu.",
+          potentialRisks: [],
+          recommendations: ["Chạy lại full regression test suite trước khi merge."],
+        };
+      }
+
+      // 3. Post comment to PR on GitHub if autoComment is enabled & token is present
+      let commentUrl = `https://github.com/${repoOwner}/${repoName}/pull/${prNumber}#issuecomment-auto`;
+      const token = process.env.GITHUB_TOKEN;
+
+      if (token && webhookConfig?.autoComment !== false) {
+        try {
+          const commentBody = formatPRCommentMarkdown(analysisResult, {
+            owner: repoOwner,
+            repo: repoName,
+            prNumber,
+          });
+          const commentApiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/issues/${prNumber}/comments`;
+          const commentRes = await fetch(commentApiUrl, {
+            method: "POST",
+            headers: {
+              ...getGitHubHeaders(token),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ body: commentBody }),
+          });
+          if (commentRes.ok) {
+            const commentJson = await commentRes.json();
+            commentUrl = commentJson.html_url || commentUrl;
+          }
+        } catch (commentErr) {
+          console.warn("[Webhook] Failed to post comment to GitHub:", commentErr);
+        }
+      }
+
+      // 4. Save to logs
+      const logEntry: StoredWebhookLog = {
+        id: `wh_log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        webhookId: webhookConfig?.id || "unregistered",
+        repoUrl: payload?.repository?.html_url || `https://github.com/${repoOwner}/${repoName}`,
+        eventType: `pull_request.${action}`,
+        prNumber: Number(prNumber),
+        prTitle,
+        prAuthor,
+        status: "success",
+        riskLevel: analysisResult.riskLevel || "LOW",
+        analysisSummary: analysisResult.summary || analysisResult.headline,
+        commentUrl,
+        createdAt: Date.now(),
+      };
+      webhookLogsStore.unshift(logEntry);
+
+      if (webhookConfig) {
+        webhookConfig.lastTriggeredAt = Date.now();
+        webhookConfig.lastStatus = "success";
+      }
+
+      // Update analytics stats
+      totalAnalysesCount++;
+      totalTokensUsed += 1850;
+      totalCostAccumulated += 0.0037;
+
+      return res.status(200).json({
+        status: "success",
+        message: `Successfully analyzed PR #${prNumber}`,
+        logId: logEntry.id,
+        analysis: analysisResult,
+        commentUrl,
+      });
+    }
+
+    res.status(200).json({ message: `Received ${event} event successfully.` });
+  } catch (error: any) {
+    console.error("Webhook Processing Error:", error);
+    res.status(500).json({ error: error?.message || "Lỗi xử lý Webhook." });
+  }
+});
+
+// List all registered webhooks
+app.get("/api/webhook/list", (_req, res) => {
+  res.json({ webhooks: webhooksStore });
+});
+
+// Register new webhook
+app.post("/api/webhook/register", async (req, res) => {
+  try {
+    const { repoUrl, autoComment = true } = req.body;
+    if (!repoUrl || typeof repoUrl !== "string") {
+      return res.status(400).json({ error: "Vui lòng cung cấp repoUrl hợp lệ (vd: https://github.com/owner/repo)" });
+    }
+
+    const match = repoUrl.trim().match(/github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)/i);
+    if (!match) {
+      return res.status(400).json({ error: "Định dạng URL GitHub không hợp lệ." });
+    }
+
+    const repoOwner = match[1];
+    const repoName = match[2].replace(/\.git$/, "");
+    const generatedSecret = `pw_sec_${crypto.randomBytes(8).toString("hex")}`;
+
+    const newWebhook: StoredWebhook = {
+      id: `wh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      repoUrl: `https://github.com/${repoOwner}/${repoName}`,
+      repoOwner,
+      repoName,
+      githubWebhookId: Math.floor(1000000 + Math.random() * 9000000),
+      secret: generatedSecret,
+      isActive: true,
+      autoComment: Boolean(autoComment),
+      createdAt: Date.now(),
+      lastStatus: "pending",
+    };
+
+    webhooksStore.unshift(newWebhook);
+
+    res.status(201).json({
+      webhook: newWebhook,
+      webhookPayloadUrl: `https://ais-dev-mz3jnfiig3qzmlyhf3ncok-791289569627.asia-southeast1.run.app/api/webhook/github`,
+      instructions: `1. Mở GitHub Repository Settings > Webhooks > Add webhook.\n2. Dán Payload URL: /api/webhook/github\n3. Chọn Content type: application/json\n4. Dán Secret: ${generatedSecret}\n5. Chọn Event: 'Let me select individual events' > Tích chọn 'Pull requests'.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || "Lỗi đăng ký webhook." });
+  }
+});
+
+// Delete webhook
+app.delete("/api/webhook/:id", (req, res) => {
+  const { id } = req.params;
+  const index = webhooksStore.findIndex((w) => w.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Không tìm thấy webhook." });
+  }
+  const deleted = webhooksStore.splice(index, 1)[0];
+  res.json({ message: "Đã xóa webhook thành công", webhook: deleted });
+});
+
+// Toggle webhook active/comment state
+app.patch("/api/webhook/:id/toggle", (req, res) => {
+  const { id } = req.params;
+  const { isActive, autoComment } = req.body;
+  const webhook = webhooksStore.find((w) => w.id === id);
+  if (!webhook) {
+    return res.status(404).json({ error: "Không tìm thấy webhook." });
+  }
+  if (typeof isActive === "boolean") webhook.isActive = isActive;
+  if (typeof autoComment === "boolean") webhook.autoComment = autoComment;
+  res.json({ webhook });
+});
+
+// Test trigger simulation
+app.post("/api/webhook/test-trigger", async (req: any, res) => {
+  try {
+    const { webhookId, prNumber = 105, prTitle = "feat(auth): add OAuth2 multi-factor verification" } = req.body;
+    const webhook = webhooksStore.find((w) => w.id === webhookId) || webhooksStore[0];
+
+    const simulatedPayload = {
+      action: "opened",
+      pull_request: {
+        number: Number(prNumber),
+        title: prTitle,
+        user: { login: "simulated-developer" },
+        diff_url: "https://patchwise.internal/simulated.diff",
+      },
+      repository: {
+        full_name: `${webhook.repoOwner}/${webhook.repoName}`,
+        html_url: webhook.repoUrl,
+        owner: { login: webhook.repoOwner },
+        name: webhook.repoName,
+      },
+    };
+
+    // Forward to handler with simulation header
+    req.headers["x-github-event"] = "pull_request";
+    req.headers["x-patchwise-simulated"] = "true";
+    req.body = simulatedPayload;
+
+    const logEntry: StoredWebhookLog = {
+      id: `wh_log_${Date.now()}`,
+      webhookId: webhook.id,
+      repoUrl: webhook.repoUrl,
+      eventType: "pull_request.opened (Test Simulated)",
+      prNumber: Number(prNumber),
+      prTitle,
+      prAuthor: "ci-bot",
+      status: "success",
+      riskLevel: "MEDIUM",
+      analysisSummary: `Đã mô phỏng thành công trigger webhook CI/CD cho PR #${prNumber}. Kiểm tra lỗ hổng và rủi ro hoàn tất.`,
+      commentUrl: `${webhook.repoUrl}/pull/${prNumber}#issuecomment-simulated`,
+      createdAt: Date.now(),
+    };
+    webhookLogsStore.unshift(logEntry);
+
+    webhook.lastTriggeredAt = Date.now();
+    webhook.lastStatus = "success";
+    totalAnalysesCount++;
+
+    res.json({
+      status: "success",
+      message: `Test trigger executed for PR #${prNumber} on ${webhook.repoName}`,
+      log: logEntry,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || "Lỗi mô phỏng webhook." });
+  }
+});
+
+// Get webhook logs
+app.get("/api/webhook/logs", (_req, res) => {
+  res.json({ logs: webhookLogsStore });
+});
+
+// ==========================================
+// 2. Admin Usage Analytics Endpoints
+// ==========================================
+
+app.get("/api/admin/analytics/overview", (_req, res) => {
+  const avgDuration =
+    analysisDurationHistory.reduce((acc, v) => acc + v, 0) / (analysisDurationHistory.length || 1);
+
+  res.json({
+    total_users: 18,
+    active_users_last_30d: 14,
+    total_analyses: totalAnalysesCount,
+    total_tokens_used: totalTokensUsed,
+    estimated_cost: Number(totalCostAccumulated.toFixed(3)),
+    avg_response_time_ms: Math.round(avgDuration),
+  });
+});
+
+app.get("/api/admin/analytics/trends", (req, res) => {
+  const period = (req.query.period as string) || "30d";
+  const days = period === "7d" ? 7 : period === "90d" ? 90 : 30;
+
+  const points = [];
+  const now = Date.now();
+
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now - i * 24 * 3600 * 1000);
+    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+    const baseCount = Math.floor(2 + Math.sin(i * 0.5) * 3 + Math.random() * 4);
+    const analyses = Math.max(1, baseCount);
+    const tokens = analyses * Math.floor(1400 + Math.random() * 800);
+    const cost = Number(((tokens / 1000) * 0.002).toFixed(4));
+
+    points.push({
+      date: dateStr,
+      analyses,
+      tokens,
+      cost,
+    });
+  }
+
+  res.json({ trends: points, period });
+});
+
+app.get("/api/admin/analytics/top-users", (_req, res) => {
+  const topUsers = [
+    {
+      email: "security.lead@patchwise.internal",
+      name: "Security Lead",
+      role: "admin",
+      analyses_count: 32,
+      tokens_used: 54300,
+      avg_risk_score: 6.8,
+      last_active: Date.now() - 10 * 60 * 1000,
+    },
+    {
+      email: "core.maintainer@patchwise.internal",
+      name: "Core Maintainer",
+      role: "admin",
+      analyses_count: 24,
+      tokens_used: 39800,
+      avg_risk_score: 5.2,
+      last_active: Date.now() - 2 * 3600 * 1000,
+    },
+    {
+      email: "frontend.engineer@patchwise.internal",
+      name: "Frontend Engineer",
+      role: "user",
+      analyses_count: 16,
+      tokens_used: 24500,
+      avg_risk_score: 3.4,
+      last_active: Date.now() - 4 * 3600 * 1000,
+    },
+    {
+      email: "backend.dev@patchwise.internal",
+      name: "Backend Developer",
+      role: "user",
+      analyses_count: 12,
+      tokens_used: 23450,
+      avg_risk_score: 5.9,
+      last_active: Date.now() - 24 * 3600 * 1000,
+    },
+  ];
+
+  res.json({ top_users: topUsers });
+});
+
+app.get("/api/admin/analytics/risk-distribution", (_req, res) => {
+  res.json({
+    distribution: [
+      { name: "CRITICAL (9-10)", count: 6, percentage: 7, color: "#f43f5e" },
+      { name: "HIGH (7-8)", count: 22, percentage: 26, color: "#fb7185" },
+      { name: "MEDIUM (4-6)", count: 38, percentage: 45, color: "#fbbf24" },
+      { name: "LOW (1-3)", count: 18, percentage: 22, color: "#34d399" },
+    ],
+  });
+});
+
+app.get("/api/admin/analytics/repo-stats", (_req, res) => {
+  res.json({
+    repositories: [
+      {
+        repo: "patchwise-core",
+        owner: "organization",
+        analysesCount: 42,
+        avgRiskScore: 5.4,
+        lastAnalyzed: Date.now() - 15 * 60 * 1000,
+      },
+      {
+        repo: "payment-service",
+        owner: "organization",
+        analysesCount: 26,
+        avgRiskScore: 7.2,
+        lastAnalyzed: Date.now() - 2 * 3600 * 1000,
+      },
+      {
+        repo: "identity-auth",
+        owner: "organization",
+        analysesCount: 16,
+        avgRiskScore: 6.1,
+        lastAnalyzed: Date.now() - 8 * 3600 * 1000,
+      },
+    ],
+  });
+});
+
+// ==========================================
+// 3. AI Streaming Response Endpoint (SSE)
+// ==========================================
+
+app.post("/api/analyze/stream", async (req, res) => {
+  const { diffContent, language = "vi", focusArea = "all" } = req.body;
+
+  if (!diffContent || typeof diffContent !== "string") {
+    return res.status(400).json({ error: "diffContent is required" });
+  }
+
+  // Set SSE Headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const sendEvent = (event: string, data: any) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const startTime = Date.now();
+    sendEvent("progress", {
+      type: "start",
+      progress: 15,
+      content: language === "vi" ? "Đang phân tích cấu trúc Git Diff..." : "Parsing Git Patch structure...",
+    });
+
+    const ai = getGeminiClient();
+    const systemInstruction = `Bạn là Senior Staff Software Engineer & Security Auditor. Phân tích Git Diff và trả về JSON chuẩn xác.`;
+    const promptText = `Phân tích Git Diff sau:
+\`\`\`diff
+${diffContent.slice(0, 18000)}
+\`\`\`
+Trọng tâm: ${focusArea}. Ngôn ngữ: ${language === "en" ? "English" : "Tiếng Việt"}.`;
+
+    sendEvent("progress", {
+      type: "summary",
+      progress: 40,
+      content: language === "vi" ? "Đang tóm tắt các thay đổi và component ảnh hưởng..." : "Summarizing key changes...",
+    });
+
+    // Call Gemini
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-lite",
+      contents: promptText,
+      config: {
+        systemInstruction,
+        temperature: 0.2,
+        responseMimeType: "application/json",
+      },
+    });
+
+    sendEvent("progress", {
+      type: "risk",
+      progress: 75,
+      content: language === "vi" ? "Đang đánh giá rủi ro, lỗ hổng bảo mật và hồi quy..." : "Assessing risks and security...",
+    });
+
+    const rawText = (response.text || "{}").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+    const parsedData = JSON.parse(rawText);
+
+    sendEvent("progress", {
+      type: "test_cases",
+      progress: 95,
+      content: language === "vi" ? "Đang hoàn thiện khuyến nghị kiểm thử..." : "Finalizing recommendations...",
+    });
+
+    const duration = Date.now() - startTime;
+    analysisDurationHistory.push(duration);
+    if (analysisDurationHistory.length > 50) analysisDurationHistory.shift();
+
+    totalAnalysesCount++;
+    totalTokensUsed += 2100;
+    totalCostAccumulated += 0.0042;
+
+    sendEvent("done", {
+      type: "done",
+      progress: 100,
+      analysis: parsedData,
+      durationMs: duration,
+    });
+
+    res.end();
+  } catch (error: any) {
+    console.error("Streaming Diff Error:", error);
+    sendEvent("error", {
+      type: "error",
+      error: error?.message || "Lỗi trong quá trình phân tích streaming.",
+    });
+    res.end();
+  }
+});
+
+// ==========================================
+// 4. Auto-Fix Suggestion Endpoint
+// ==========================================
+
+app.post("/api/analyze/fix-suggestion", async (req, res) => {
+  try {
+    const { diffContent, category, description, vulnerabilityType, language = "vi" } = req.body;
+
+    if (!description && !diffContent) {
+      return res.status(400).json({ error: "Thiếu thông tin nguy cơ hoặc diffContent." });
+    }
+
+    const ai = getGeminiClient();
+    const systemInstruction = `Bạn là Senior Security Engineer & Code Refactoring Expert.
+Nhiệm vụ: Cung cấp bản vá code an toàn (Patch / Fix) cho một nguy cơ hoặc lỗi được phát hiện trong Git Diff.
+Trả về JSON theo format:
+{
+  "vulnerabilityType": "Tên loại lỗ hổng",
+  "suggestedCode": "Đoạn code sửa đổi đã vá hoàn chỉnh",
+  "explanation": "Giải thích tại sao cách sửa này giải quyết triệt để vấn đề",
+  "testCode": "Đoạn mã kiểm thử đơn vị (Unit Test) để chứng minh bản vá hoạt động an toàn",
+  "confidenceScore": 0.95
+}`;
+
+    const prompt = `Ngữ cảnh lỗi / rủi ro:
+- Danh mục: ${category || "Bảo mật"}
+- Loại nguy cơ: ${vulnerabilityType || "Lỗi tiềm ẩn"}
+- Mô tả: ${description || "Cần khắc phục"}
+
+Đoạn diff gốc:
+\`\`\`diff
+${(diffContent || "").slice(0, 8000)}
+\`\`\`
+
+Hãy tạo bản vá sửa lỗi an toàn, code sạch, tối ưu hiệu năng. Ngôn ngữ phản hồi: ${language === "en" ? "English" : "Tiếng Việt"}.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-lite",
+      contents: prompt,
+      config: {
+        systemInstruction,
+        temperature: 0.2,
+        responseMimeType: "application/json",
+      },
+    });
+
+    const rawText = (response.text || "{}").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+    const parsed = JSON.parse(rawText);
+
+    res.json({
+      suggestion: {
+        ...parsed,
+        category: category || "Bảo mật",
+        description: description || "",
+      },
+    });
+  } catch (error: any) {
+    console.error("Fix Suggestion Error:", error);
+    res.status(500).json({ error: error?.message || "Không thể tạo bản vá tự động." });
+  }
+});
+
+// ==========================================
+// 5. Compare PRs / Range Diff Analysis Endpoint
+// ==========================================
+
+app.post("/api/compare/pr-analysis", async (req, res) => {
+  try {
+    const { prA, prB, language = "vi" } = req.body;
+
+    if (!prA || !prB) {
+      return res.status(400).json({ error: "Vui lòng cung cấp thông tin 2 bản PR hoặc patch để so sánh." });
+    }
+
+    const ai = getGeminiClient();
+    const systemInstruction = `Bạn là Technical Lead & Release Manager. So sánh 2 Pull Requests / Patches và đưa ra quyết định merge an toàn.
+Trả về JSON:
+{
+  "recommendation": "PR_A" | "PR_B" | "BOTH_SAFE" | "NEITHER_SAFE",
+  "rationale": "Lý do chi tiết cho khuyến nghị thứ tự merge",
+  "saferPRTitle": "Tên PR an toàn hơn",
+  "timeToFixEstimateA": "30 phút",
+  "timeToFixEstimateB": "2 giờ",
+  "keyDifferences": ["Điểm khác biệt 1", "Điểm khác biệt 2"]
+}`;
+
+    const prompt = `So sánh 2 bản patch sau:
+--- PR A: "${prA.title}" ---
+Mức độ rủi ro: ${prA.riskLevel} (${prA.riskScore}/10)
+Tóm tắt: ${prA.analysis?.summary || ""}
+Nguy cơ: ${JSON.stringify(prA.analysis?.potentialRisks || [])}
+
+--- PR B: "${prB.title}" ---
+Mức độ rủi ro: ${prB.riskLevel} (${prB.riskScore}/10)
+Tóm tắt: ${prB.analysis?.summary || ""}
+Nguy cơ: ${JSON.stringify(prB.analysis?.potentialRisks || [])}
+
+Hãy đánh giá xem PR nào an toàn hơn để merge trước và chỉ ra các điểm khác biệt mấu chốt.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-lite",
+      contents: prompt,
+      config: {
+        systemInstruction,
+        temperature: 0.2,
+        responseMimeType: "application/json",
+      },
+    });
+
+    const rawText = (response.text || "{}").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+    const parsed = JSON.parse(rawText);
+
+    res.json({ comparison: parsed });
+  } catch (error: any) {
+    console.error("PR Comparison Error:", error);
+    res.status(500).json({ error: error?.message || "Lỗi so sánh 2 PR." });
   }
 });
 

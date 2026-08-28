@@ -19,8 +19,10 @@ import {
   RefreshCw,
   Info,
   Shield,
+  BarChart3,
 } from "lucide-react";
 import { UserProfile, UserRole, AuditLogEntry } from "../types";
+import { AdminAnalyticsTab } from "./AdminAnalyticsTab";
 import {
   getUserRegistry,
   updateUserRole,
@@ -48,7 +50,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [activeTab, setActiveTab] = useState<"users" | "matrix" | "audit">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "analytics" | "matrix" | "audit">("users");
 
   // New user form state
   const [newEmail, setNewEmail] = useState<string>("");
@@ -214,6 +216,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <Users className="w-3.5 h-3.5" />
               <span>Danh sách người dùng ({users.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("analytics")}
+              className={`px-4 py-3 text-xs font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === "analytics"
+                  ? "border-indigo-500 text-indigo-300 font-semibold"
+                  : "border-transparent text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Thống kê & AI Analytics</span>
             </button>
 
             <button
@@ -468,6 +482,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* TAB: ANALYTICS */}
+          {activeTab === "analytics" && (
+            <AdminAnalyticsTab currentUser={currentUser} language={language} />
           )}
 
           {/* TAB 2: RBAC PERMISSIONS MATRIX */}

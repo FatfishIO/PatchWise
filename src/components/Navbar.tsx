@@ -9,6 +9,8 @@ import {
   Eye,
   LogOut,
   Sliders,
+  Webhook,
+  GitCompare,
 } from "lucide-react";
 import { UserProfile, UserRole } from "../types";
 
@@ -23,6 +25,8 @@ interface NavbarProps {
   onOpenAdminDashboard: () => void;
   onSignOut: () => void;
   onSwitchRole?: (role: UserRole) => void;
+  onOpenWebhookSettings?: () => void;
+  onOpenCompare?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -36,6 +40,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAdminDashboard,
   onSignOut,
   onSwitchRole,
+  onOpenWebhookSettings,
+  onOpenCompare,
 }) => {
   const getRoleBadge = (role: UserRole) => {
     switch (role) {
@@ -89,6 +95,32 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Action Controls & User Profile */}
         <div className="flex items-center gap-2">
+          {/* Webhook CI/CD Button */}
+          {onOpenWebhookSettings && (
+            <button
+              id="btn-open-webhook-settings"
+              onClick={onOpenWebhookSettings}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold transition cursor-pointer shadow-sm"
+              title="Cấu hình Webhook GitHub/GitLab CI/CD"
+            >
+              <Webhook className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden md:inline">Webhook CI/CD</span>
+            </button>
+          )}
+
+          {/* Cross Compare Button */}
+          {onOpenCompare && (
+            <button
+              id="btn-open-compare"
+              onClick={onOpenCompare}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold transition cursor-pointer shadow-sm"
+              title="So sánh chéo 2 bản PR / Patches"
+            >
+              <GitCompare className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden lg:inline">So sánh PRs</span>
+            </button>
+          )}
+
           {/* Admin Dashboard Button (Only visible for admin) */}
           {currentUser.role === "admin" && (
             <button

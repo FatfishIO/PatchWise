@@ -66,6 +66,8 @@ const PERMISSION_MATRIX: Record<RBACAction, UserRole[]> = {
   fetch_github: ["admin", "user"],
   export_report: ["admin", "user", "viewer"],
   clear_history: ["admin", "user"],
+  manage_webhooks: ["admin", "user"],
+  view_analytics: ["admin"],
 };
 
 /**

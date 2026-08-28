@@ -1,142 +1,162 @@
-# PatchWise AI - Smart Git Patch & Risk Analysis Platform
+# PatchWise AI - Smart Git Diff & Pull Request Security Intelligence
 
-**PatchWise AI** là nền tảng phân tích mã nguồn và bản vá Git (Git Diff / Patch) tự động bằng trí tuệ nhân tạo (Google Gemini AI). Ứng dụng giúp các kỹ sư phần mềm, Tech Lead và chuyên gia bảo mật phân tích sâu tác động, tìm ra nguyên nhân gốc rễ (Root Cause), phát hiện rủi ro bảo mật (Security Risks), lỗi hồi quy (Regressions) và đề xuất kịch bản kiểm thử (Test Cases) chỉ trong vài giây.
-
----
-
-## 🌟 Tính Năng Nổi Bật
-
-### 1. 🤖 Phân Tích Bản Vá Thông Minh với Google Gemini AI
-- **Tóm tắt thay đổi (Summary & Intent)**: Giải thích ngắn gọn, súc tích mục đích của bản vá.
-- **Phân tích nguyên nhân gốc rễ (Root Cause Analysis)**: Xác định lý do thay đổi mã (sửa lỗi, tái cấu trúc, tối ưu hiệu năng, vá bảo mật).
-- **Đánh giá rủi ro đa chiều (Risk Assessment)**:
-  - Phân loại mức độ rủi ro: **Thấp (Low)**, **Trung bình (Medium)**, **Cao (High)**, **Nghiêm trọng (Critical)**.
-  - Phân tích rủi ro bảo mật (SQL Injection, XSS, Race Condition, v.v.).
-  - Cảnh báo phá vỡ tính tương thích (Breaking Changes) và hiệu năng (Performance Impact).
-- **Gợi ý kịch bản kiểm thử (Test Recommendations)**: Tự động sinh danh sách test cases và edge cases cần kiểm tra trước khi merge.
-- **Hỏi đáp tương tác (Diff AI Chat Assistant)**: Cho phép đặt câu hỏi chuyên sâu trực tiếp trên ngữ cảnh của bản vá vừa phân tích.
-
-### 2. 🔍 Trực Quan Hóa Git Diff (Visual Diff Viewer)
-- Hỗ trợ xem dạng **Split View (2 cột)** và **Unified View (1 cột)**.
-- Đánh dấu cú pháp (Syntax Highlighting), tô màu thêm/xóa rõ ràng.
-- Hiển thị thống kê chi tiết: số file thay đổi, số dòng thêm (+), số dòng xóa (-).
-- Bộ lọc theo từng file và tìm kiếm nội dung diff nhanh chóng.
-
-### 3. 🐙 Tích Hợp GitHub API Tự Động
-- Lấy diff trực tiếp qua **Đường dẫn GitHub (URL)**:
-  - Pull Request URL (ví dụ: `https://github.com/facebook/react/pull/26000`)
-  - Commit URL (ví dụ: `https://github.com/nodejs/node/commit/abcdef...`)
-  - Branch Compare URL (ví dụ: `https://github.com/facebook/react/compare/main...canary`)
-- Nhập nhanh theo thông số Repo / Branch / PR number / Commit SHA.
-- Hỗ trợ cấu hình **GitHub Personal Access Token (PAT)** để nâng hạn ngạch gọi API và truy cập Private Repositories.
-
-### 4. 🔐 Xác Thực Google Sign-In & Phân Quyền RBAC
-- **Google Identity Services (GIS)**: Xác thực đăng nhập an toàn bằng tài khoản Google.
-- **Mô hình phân quyền 3 cấp độ (Role-Based Access Control)**:
-  - **`ADMIN`**: Toàn quyền phân tích, mở Admin Dashboard, quản lý danh sách người dùng, thay đổi vai trò và kiểm toán hệ thống.
-  - **`USER` (Mặc định)**: Dán/tải diff, chạy phân tích AI, tương tác với AI Assistant, quản lý lịch sử.
-  - **`VIEWER` (Chỉ đọc)**: Chỉ xem giao diện diff và kết quả báo cáo; bị chặn quyền khởi chạy phân tích AI mới.
-- **Admin Dashboard**:
-  - Quản lý danh sách thành viên và đổi vai trò tức thì.
-  - Cấp quyền trước cho email mới.
-  - Xem bảng ma trận phân quyền (RBAC Matrix).
-  - Ghi vết lịch sử thay đổi quyền (Audit Logs).
-
-### 5. 📂 Quản Lý Lịch Sử & Xuất Báo Cáo
-- Tự động lưu lịch sử các lần phân tích vào bộ nhớ trình duyệt (LocalStorage).
-- Tìm kiếm, lọc lịch sử theo mức độ rủi ro (Low / Medium / High).
-- Xuất báo cáo đánh giá bản vá sang định dạng **Markdown (`.md`)** chuyên nghiệp.
-- Hỗ trợ song ngữ hoàn chỉnh: **Tiếng Việt (VI)** và **Tiếng Anh (EN)**.
+<div align="center">
+  <img src="https://api.dicebear.com/7.x/bottts/svg?seed=PatchWise" alt="PatchWise AI Logo" width="96" height="96" />
+  <h3>Bảo mật & Phân tích Git Diff thông minh với Google Gemini AI</h3>
+  <p>Tự động hóa phân tích Pull Request, kiểm tra lỗ hổng bảo mật, giải thích nguyên nhân gốc rễ, đề xuất mã sửa lỗi tự động và tích hợp CI/CD Webhook cho GitHub & GitLab.</p>
+</div>
 
 ---
 
-## 🛠️ Công Nghệ Sử Dụng
+## 🌟 Tổng quan dự án
 
-- **Frontend**: React 18, TypeScript, Tailwind CSS, Lucide React Icons.
-- **AI Engine**: Google GenAI TypeScript SDK (`@google/genai`), mô hình `gemini-2.5-flash` / `gemini-2.5-pro`.
-- **Backend & Middleware**: Express.js, Vite HMR Middleware, TypeScript execution qua `tsx` / `esbuild`.
-- **Authentication**: Google Identity Services (GIS) OAuth 2.0 Client SDK.
-- **State & Storage**: React Hooks, Client-side Storage, Resilient Fallback Engine.
+**PatchWise AI** là nền tảng toàn diện hỗ trợ các kỹ sư phần mềm, Tech Lead, SecOps và QA trong việc đánh giá rủi ro của các bản vá mã nguồn (**Git Diff / Patch / Pull Request**). Sử dụng mô hình **Google Gemini 2.5 Flash**, PatchWise AI phân tích sâu từng hunk mã nguồn, phát hiện các lỗ hổng bảo mật (SQL Injection, XSS, Race Condition, v.v.), đánh giá nguy cơ phá vỡ tính tương thích (Breaking Change), tự động tạo mã khắc phục (Auto-Fix) và đồng bộ trực tiếp lên Pull Request thông qua Webhook.
 
 ---
 
-## 📁 Cấu Trúc Thư Mục
+## 🚀 Các tính năng chính
 
-```text
-├── index.html                   # Entry point HTML & Google Identity Services Script
-├── metadata.json                # Cấu hình Metadata & Capabilities của ứng dụng
-├── package.json                 # Khai báo dependencies & build scripts
-├── server.ts                    # Backend Express API (Gemini proxy & GitHub API handler)
-├── src/
-│   ├── main.tsx                 # React app entry point
-│   ├── App.tsx                  # Root component, quản lý trạng thái chính
-│   ├── index.css                # Global Tailwind CSS styling
-│   ├── types.ts                 # Toàn bộ Interface, Types, RBAC permissions
-│   ├── components/
-│   │   ├── Navbar.tsx           # Thanh điều hướng, thông tin tài khoản, role badge
-│   │   ├── LoginScreen.tsx      # Màn hình đăng nhập Google GIS & Demo Accounts
-│   │   ├── AdminDashboard.tsx   # Bảng quản trị người dùng & phân quyền RBAC
-│   │   ├── DiffInput.tsx        # Trình nhập liệu Diff (Paste, File Upload, GitHub API)
-│   │   ├── DiffViewer.tsx       # Trình trực quan hóa Git Diff (Split / Unified)
-│   │   ├── AnalysisResults.tsx  # Hiển thị kết quả đánh giá rủi ro và khuyến nghị AI
-│   │   ├── DiffChat.tsx         # Trợ lý AI tương tác hỏi đáp về bản vá
-│   │   └── HistoryDrawer.tsx    # Drawer quản lý và xuất lịch sử phân tích
-│   ├── data/
-│   │   └── samplePatches.ts     # Các mẫu Git Diff thử nghiệm sẵn (SQLi, Race Condition,...)
-│   └── utils/
-│       ├── authUtils.ts         # Logic phân quyền RBAC, mã hóa session & audit logs
-│       ├── diffParser.ts        # Thuật toán phân tích cú pháp Git Diff & AST stats
-│       └── githubUtils.ts       # Xử lý URL và tương tác GitHub API
-└── README.md                    # Tài liệu hướng dẫn sử dụng dự án
+### 1. 🔍 Phân tích Git Diff chuyên sâu với Gemini AI
+- **Tóm tắt thay đổi (Summary)**: Bóc tách logic cấp cao của PR, số lượng file, dòng thêm/xóa.
+- **Nguyên nhân gốc rễ (Root Cause Analysis)**: Xác định mục tiêu tác giả và bài toán lập trình viên đang giải quyết.
+- **Đánh giá rủi ro (Risk Scoring & Classification)**: Chấm điểm rủi ro từ **1 đến 10** và phân loại nguy cơ (**LOW / MEDIUM / HIGH**) cho:
+  - 🛡️ **Bảo mật (Security)**: SQL Injection, Hardcoded Secrets, Insecure Deserialization, XSS, CSRF, v.v.
+  - ⚡ **Hiệu năng (Performance)**: N+1 query, Memory leak, CPU bottleneck, vòng lặp vô tận.
+  - 💥 **Tính tương thích (Breaking Changes)**: Thay đổi API contract, database schema, types.
+- **Checklist kiểm thử cho Reviewer**: Hướng dẫn các ca kiểm thử biên (Edge cases) cần thực hiện trước khi merge.
+- **Giải thích từng khối mã (Hunk Explanations)**: Đi sâu vào logic cụ thể của từng đoạn code thay đổi.
+
+### 2. ⚡ AI Auto-Fix (Đề xuất giải pháp sửa lỗi & Unit Test)
+- Tại mỗi cảnh báo rủi ro, người dùng có thể nhấn **"💡 Đề xuất Fix"**.
+- Gemini AI tự động tạo đoạn mã đã khắc phục theo chuẩn Clean Code & Security Best Practices.
+- Cung cấp sẵn mã kiểm thử đơn vị (**Unit Test**) để phòng ngừa hồi quy (Regression Test).
+- Hỗ trợ xem Diff trực quan (**Before vs. After**) và sao chép mã 1-click.
+
+### 3. 🤖 Tích hợp Webhook GitHub / GitLab (CI/CD Automation)
+- **Tự động nhận diện Pull Request**: Lắng nghe các sự kiện `pull_request.opened`, `pull_request.synchronize`, `pull_request.reopened` từ GitHub hoặc `Merge Request Hook` từ GitLab.
+- **Bảo mật Webhook Secret**: Tự động xác thực chữ ký HMAC-SHA256 (`x-hub-signature-256` / `X-Gitlab-Token`).
+- **Tự động comment lên PR**: Tự động gọi GitHub/GitLab REST API để gửi nhận xét đánh giá rủi ro và checklist trực tiếp lên PR.
+- **Nhật ký Webhook (Audit Logs)**: Lưu trữ lịch sử tất cả payload, trạng thái phân tích, mã HTTP và thời gian xử lý.
+- **Công cụ Test Webhook (Simulator)**: Cho phép mô phỏng sự kiện Webhook ngay trên giao diện để kiểm thử mà không cần trigger git push thật.
+
+### 4. 📊 Bảng điều khiển quản trị & Thống kê sử dụng (Admin Usage Analytics)
+- **Chỉ số KPI thời gian thực**: Tổng số lượt phân tích, tổng tokens tiêu thụ, thời gian phản hồi trung bình (ms), tỷ lệ thành công (%).
+- **Phân bổ rủi ro (Risk Distribution)**: Biểu đồ trực quan tỷ lệ rủi ro Thấp, Trung bình, Cao.
+- **Xu hướng theo ngày (Daily Trends)**: Biểu đồ Area/Bar chart theo dõi lượng truy vấn và token theo thời gian.
+- **Top danh mục rủi ro phổ biến**: Thống kê các lỗi thường gặp nhất trong mã nguồn đội ngũ.
+- **Xuất dữ liệu**: Hỗ trợ xuất dữ liệu phân tích ra định dạng JSON/CSV.
+
+### 5. 🛡️ Phân quyền người dùng (Role-Based Access Control - RBAC)
+- **3 vai trò chuẩn**:
+  - **ADMIN**: Toàn quyền quản trị hệ thống, quản lý tài khoản, cấu hình Webhook, xem Dashboard Analytics và phân tích diff.
+  - **USER**: Thực hiện phân tích Git Diff, tra cứu lịch sử, tương tác với AI Assistant, cấu hình Webhook dự án.
+  - **VIEWER**: Chế độ chỉ đọc, xem kết quả phân tích và lịch sử kiểm toán, không tiêu tốn token của tổ chức.
+- **Bảo vệ dữ liệu nhạy cảm**: Tự động ẩn danh địa chỉ email, bảo vệ dữ liệu PII và lưu trữ an toàn.
+
+### 6. 📄 Xuất báo cáo kiểm toán chuyên nghiệp (Print & Export PDF)
+- Xuất toàn bộ báo cáo phân tích rủi ro dưới dạng bản in chuẩn hóa (**Print-ready A4 PDF layout**).
+- Tích hợp xuất định dạng **Markdown** chuẩn để dán vào Jira, GitHub Issue hoặc Confluence.
+
+### 7. ⚖️ So sánh chéo 2 bản PR / Patches (Cross-PR Comparison)
+- Cho phép đặt 2 bản vá cạnh nhau để đối chiếu độ phức tạp, điểm rủi ro, số dòng thay đổi và các phát hiện bảo mật giữa các phiên bản.
+
+---
+
+## 🛠️ Kiến trúc công nghệ (Tech Stack)
+
+| Thành phần | Công nghệ sử dụng |
+| :--- | :--- |
+| **Frontend** | React 18, TypeScript, Tailwind CSS, Lucide Icons, Recharts, Motion |
+| **Backend** | Node.js, Express, `crypto` (HMAC-SHA256), Server-Sent Events (SSE) |
+| **AI Engine** | Google Gemini API (`@google/genai` - `gemini-2.5-flash`) |
+| **Authentication** | Google OAuth 2.0 Identity Services + Demo Session Fallback |
+| **Parsing** | Git Unified Diff AST Parser & Tokenizer |
+
+---
+
+## ⚙️ Cài đặt & Khởi chạy dự án
+
+### 1. Yêu cầu hệ thống
+- **Node.js**: >= 18.0.0
+- **npm** hoặc **yarn**
+- **Google Gemini API Key**: Lấy tại [Google AI Studio](https://aistudio.google.com/)
+
+### 2. Cấu hình biến môi trường
+Tạo file `.env` tại thư mục gốc của dự án:
+
+```env
+# Gemini API Key (Bắt buộc cho server)
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Cổng dịch vụ (Mặc định 3000)
+PORT=3000
 ```
 
----
+### 3. Cài đặt thư viện & Khởi chạy
 
-## 🚀 Cài Đặt & Chạy Ứng Dụng
+```bash
+# Cài đặt các gói phụ thuộc
+npm install
 
-### Yêu cầu môi trường:
-- **Node.js**: Phiên bản 18.x hoặc cao hơn.
-- **NPM** hoặc **Yarn**.
-- **Gemini API Key**: Đăng ký miễn phí tại [Google AI Studio](https://aistudio.google.com/).
+# Khởi chạy môi trường phát triển (Dev Server)
+npm run dev
 
-### Các bước khởi chạy:
+# Biên dịch sản phẩm (Production Build)
+npm run build
 
-1. **Cài đặt dependencies**:
-   ```bash
-   npm install
-   ```
+# Chạy server sản phẩm
+npm run start
+```
 
-2. **Cấu hình biến môi trường**:
-   Tạo file `.env` hoặc thiết lập biến môi trường:
-   ```env
-   GEMINI_API_KEY=your_gemini_api_key_here
-   # Tùy chọn: GitHub Personal Access Token để tăng rate limit
-   GITHUB_TOKEN=ghp_your_optional_github_token
-   ```
-
-3. **Chạy ứng dụng ở chế độ Development**:
-   ```bash
-   npm run dev
-   ```
-   Ứng dụng sẽ chạy tại địa chỉ: `http://localhost:3000`
-
-4. **Biên dịch Production**:
-   ```bash
-   npm run build
-   npm start
-   ```
+Sau khi khởi chạy, truy cập ứng dụng tại `http://localhost:3000`.
 
 ---
 
-## 🔒 Hướng Dẫn Cấu Hình Google OAuth 2.0 (Tùy chọn)
+## 📡 Tài liệu API Backend
 
-Nếu bạn muốn cấu hình Google Sign-In chính thức cho tên miền của mình:
-1. Mở [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
-2. Tạo **OAuth 2.0 Client ID** (loại **Web application**).
-3. Thêm domain của bạn vào phần **Authorized JavaScript origins**.
-4. Mở ứng dụng PatchWise, chọn **"Cấu hình OAuth Client"** ở góc trên và dán Client ID vào để áp dụng.
+### 1. Phân tích Git Diff
+- **Endpoint**: `POST /api/analyze-diff`
+- **Body**:
+  ```json
+  {
+    "diffContent": "diff --git a/server.js b/server.js...",
+    "language": "vi",
+    "focusArea": "all"
+  }
+  ```
+
+### 2. Tự động đề xuất sửa lỗi (Auto-Fix)
+- **Endpoint**: `POST /api/suggest-fix`
+- **Body**:
+  ```json
+  {
+    "risk": {
+      "category": "SQL Injection",
+      "severity": "HIGH",
+      "description": "User input directly concatenated into query"
+    },
+    "diffContent": "...",
+    "language": "vi"
+  }
+  ```
+
+### 3. Webhook GitHub CI/CD
+- **Endpoint**: `POST /api/webhook/github`
+- **Headers**:
+  - `x-hub-signature-256`: `sha256=...` (Chữ ký HMAC)
+  - `x-github-event`: `pull_request`
+
+### 4. Thống kê sử dụng (Admin Analytics)
+- **Endpoint**: `GET /api/admin/analytics?timeRange=30d`
 
 ---
 
-## 📄 Bản Quyền & Giấy Phép
-Dự án được phân phối dưới giấy phép **Apache-2.0 License**.
+## 🔒 Bảo mật & Quyền riêng tư
+- Toàn bộ lệnh gọi tới Gemini AI được thực hiện độc quyền ở phía máy chủ (**Server-Side Only**), ngăn ngừa rò rỉ API Key ra trình duyệt.
+- Dữ liệu định danh cá nhân (PII) như email người dùng được tự động ẩn danh hóa trên giao diện quản trị theo yêu cầu bảo mật.
+- Xác thực chữ ký mã hóa Webhook bảo vệ hệ thống khỏi các cuộc tấn công giả mạo (Replay / Spoofing Attacks).
+
+---
+
+## 📄 Bản quyền & Giấy phép
+Phát triển với ❤️ bởi **PatchWise AI Team**. Phát hành theo giấy phép **Apache-2.0 License**.
