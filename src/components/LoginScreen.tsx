@@ -26,7 +26,6 @@ import {
   GOOGLE_CLIENT_ID_KEY,
   DEFAULT_GOOGLE_CLIENT_ID,
   determineRoleForEmail,
-  PREDEFINED_ADMIN_EMAILS,
 } from "../utils/authUtils";
 
 interface LoginScreenProps {
@@ -343,20 +342,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
               </div>
             </div>
 
-            {/* Predefined Admin Notice */}
+            {/* Security & Access Notice */}
             <div className="p-3 rounded-xl bg-indigo-950/20 border border-indigo-800/40 text-xs text-indigo-200/90 flex items-start gap-2.5">
               <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
               <div className="text-[11px] leading-relaxed space-y-1">
-                <p>
-                  <span className="font-semibold text-indigo-300">Admin mặc định: </span>
-                  {PREDEFINED_ADMIN_EMAILS.map((e, idx) => (
-                    <code key={e} className="font-mono bg-indigo-900/40 text-indigo-300 px-1 py-0.5 rounded text-[10px] mr-1">
-                      {e}
-                    </code>
-                  ))}
+                <p className="font-semibold text-indigo-300">
+                  {language === "vi" ? "Kiểm soát truy cập theo vai trò (RBAC):" : "Role-Based Access Control (RBAC):"}
                 </p>
                 <p className="text-zinc-400">
-                  Bất kỳ người dùng nào đăng nhập bằng email trong danh sách này sẽ tự động nhận quyền <strong className="text-indigo-300">Admin</strong>.
+                  {language === "vi"
+                    ? "Hệ thống tự động phân quyền tài khoản dựa trên chính sách bảo mật nội bộ của tổ chức khi đăng nhập."
+                    : "The system automatically assigns account privileges based on internal security policies upon login."}
                 </p>
               </div>
             </div>
