@@ -279,4 +279,24 @@ export interface PRComparisonAnalysis {
   keyDifferences: string[];
 }
 
+// ==========================================
+// 5. Shared Report (Public Viewer Link) Types
+// ==========================================
+
+export interface SharedReport {
+  id: string;
+  title: string;
+  diffContent: string;
+  analysis: DiffAnalysisResult;
+  stats: DiffStats;
+  githubMeta?: GitHubDiffMetadata | null;
+  createdBy: {
+    name: string;
+    email: string;
+    picture?: string;
+  };
+  createdAt: number;
+  viewsCount: number;
+}
+
 

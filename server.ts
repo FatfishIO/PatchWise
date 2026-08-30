@@ -136,6 +136,27 @@ const webhookLogsStore: StoredWebhookLog[] = [
   },
 ];
 
+// ==========================================
+// Shared Reports Store (For Public Viewer Links)
+// ==========================================
+interface StoredSharedReport {
+  id: string;
+  title: string;
+  diffContent: string;
+  analysis: any;
+  stats?: any;
+  githubMeta?: any;
+  createdBy: {
+    name: string;
+    email: string;
+    picture?: string;
+  };
+  createdAt: number;
+  viewsCount: number;
+}
+
+const sharedReportsStore = new Map<string, StoredSharedReport>();
+
 // In-Memory Analytics Registry
 let totalAnalysesCount = 84;
 let totalTokensUsed = 142050;
@@ -1482,6 +1503,76 @@ Hãy đánh giá xem PR nào an toàn hơn để merge trước và chỉ ra cá
   } catch (error: any) {
     console.error("PR Comparison Error:", error);
     res.status(500).json({ error: error?.message || "Lỗi so sánh 2 PR." });
+  }
+});
+
+// ==========================================
+// Public Shared Report Endpoints
+// ==========================================
+
+// Create a shareable report link
+app.post("/api/share/create", (req, res) => {
+  try {
+    const { diffContent, analysis, stats, githubMeta, createdBy, title } = req.body;
+
+    if (!diffContent || !analysis) {
+      return res.status(400).json({ error: "Thiếu dữ liệu diff hoặc kết quả phân tích để tạo liên kết chia sẻ." });
+    }
+
+    const shareId = `sh_${crypto.randomBytes(6).toString("hex")}`;
+    const newReport: StoredSharedReport = {
+      id: shareId,
+      title: title || analysis.headline || "Báo cáo Phân tích Git Diff",
+      diffContent,
+      analysis,
+      stats: stats || null,
+      githubMeta: githubMeta || null,
+      createdBy: createdBy || {
+        name: "Lập trình viên",
+        email: "anonymous@patchwise.dev",
+      },
+      createdAt: Date.now(),
+      viewsCount: 0,
+    };
+
+    sharedReportsStore.set(shareId, newReport);
+
+    res.json({
+      success: true,
+      shareId,
+      shareUrl: `/?share_id=${shareId}`,
+      report: newReport,
+    });
+  } catch (error: any) {
+    console.error("Create Share Error:", error);
+    res.status(500).json({ error: error?.message || "Lỗi khi tạo liên kết chia sẻ." });
+  }
+});
+
+// Get a shared report by ID (Public read-only for Viewer Mode)
+app.get("/api/share/:shareId", (req, res) => {
+  try {
+    const { shareId } = req.params;
+    const report = sharedReportsStore.get(shareId);
+
+    if (!report) {
+      return res.status(404).json({
+        error: "Không tìm thấy báo cáo được chia sẻ hoặc liên kết đã hết hạn.",
+        code: "REPORT_NOT_FOUND",
+      });
+    }
+
+    // Increment views count
+    report.viewsCount = (report.viewsCount || 0) + 1;
+    sharedReportsStore.set(shareId, report);
+
+    res.json({
+      success: true,
+      report,
+    });
+  } catch (error: any) {
+    console.error("Get Shared Report Error:", error);
+    res.status(500).json({ error: error?.message || "Lỗi khi lấy thông tin báo cáo." });
   }
 });
 

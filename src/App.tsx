@@ -33,6 +33,8 @@ import {
   Zap,
   CheckCircle,
   HelpCircle,
+  Eye,
+  Share2,
 } from "lucide-react";
 
 const STORAGE_KEY = "diffinsight_history_v1";
@@ -44,6 +46,7 @@ export default function App() {
     const session = getStoredSession();
     return session ? session.user : null;
   });
+  const [sharedReportInfo, setSharedReportInfo] = useState<any | null>(null);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState<boolean>(false);
   const [isWebhookModalOpen, setIsWebhookModalOpen] = useState<boolean>(false);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false);
@@ -98,6 +101,59 @@ export default function App() {
       console.error("Could not persist history:", e);
     }
   }, [history]);
+
+  // Check for shared report in URL query (?share_id=... or ?share=...)
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const shareId = urlParams.get("share_id") || urlParams.get("share");
+      if (shareId) {
+        fetch(`/api/share/${shareId}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.report) {
+              const rep = data.report;
+              setDiffContent(rep.diffContent || "");
+              setAnalysis(rep.analysis || null);
+              if (rep.githubMeta) setGithubMeta(rep.githubMeta);
+              setSharedReportInfo({
+                id: rep.id,
+                title: rep.title,
+                createdBy: rep.createdBy,
+                createdAt: rep.createdAt,
+                viewsCount: rep.viewsCount,
+              });
+
+              // If unauthenticated, auto-login as Guest Viewer so they can view immediately
+              setCurrentUser((prev) => {
+                if (prev) return prev;
+                const guestViewer: UserProfile = {
+                  id: `viewer-${Date.now()}`,
+                  email: "guest.viewer@patchwise.dev",
+                  name: "Khách Xem Báo Cáo",
+                  role: "viewer",
+                  authProvider: "demo",
+                  lastLoginAt: Date.now(),
+                  createdAt: Date.now(),
+                };
+                return guestViewer;
+              });
+            } else {
+              setError(
+                language === "vi"
+                  ? "Không tìm thấy báo cáo được chia sẻ hoặc liên kết đã hết hạn."
+                  : "Shared report not found or expired."
+              );
+            }
+          })
+          .catch((e) => {
+            console.error("Fetch shared report error:", e);
+          });
+      }
+    } catch (e) {
+      console.warn("Could not parse URL query params:", e);
+    }
+  }, [language]);
 
   // Handle Login & Logout
   const handleLoginSuccess = (user: UserProfile) => {
@@ -251,6 +307,61 @@ export default function App() {
           </div>
         )}
 
+        {/* Shared Report Banner if viewing shared report */}
+        {sharedReportInfo && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-950/80 via-zinc-900 to-emerald-950/40 border border-indigo-700/60 text-zinc-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl animate-in fade-in">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">
+                <Eye className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold border border-emerald-500/30">
+                    {language === "vi" ? "BÁO CÁO ĐƯỢC CHIA SẺ" : "SHARED REPORT"}
+                  </span>
+                  <span className="text-xs text-zinc-400 font-mono">
+                    ID: {sharedReportInfo.id}
+                  </span>
+                  {sharedReportInfo.viewsCount > 1 && (
+                    <span className="text-[11px] text-zinc-400 font-mono">
+                      • {sharedReportInfo.viewsCount} {language === "vi" ? "lượt xem" : "views"}
+                    </span>
+                  )}
+                </div>
+                <h4 className="text-sm font-bold text-white">
+                  {sharedReportInfo.title}
+                </h4>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  {language === "vi" ? "Được phân tích & chia sẻ bởi: " : "Shared by: "}
+                  <strong className="text-indigo-300">
+                    {sharedReportInfo.createdBy?.name || "Lập trình viên"}
+                  </strong>{" "}
+                  <span className="text-zinc-400">
+                    ({sharedReportInfo.createdBy?.email || "anonymous"})
+                  </span>{" "}
+                  •{" "}
+                  <span className="text-emerald-400 font-medium">
+                    {language === "vi" ? "Chế độ Người xem (Viewer - Read-only)" : "Secure Viewer Mode"}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+              <button
+                id="btn-exit-shared-view"
+                onClick={() => {
+                  window.history.replaceState({}, document.title, window.location.pathname);
+                  setSharedReportInfo(null);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs border border-zinc-700 transition cursor-pointer font-medium"
+              >
+                {language === "vi" ? "Đóng liên kết chia sẻ" : "Exit Shared View"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 2-Column Responsive Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column: Input & Visual Diff Viewer */}
@@ -288,6 +399,8 @@ export default function App() {
                   language={language}
                   githubMeta={githubMeta}
                   rawDiff={diffContent}
+                  currentUser={currentUser}
+                  stats={stats}
                 />
                 <DiffChat
                   currentUser={currentUser}

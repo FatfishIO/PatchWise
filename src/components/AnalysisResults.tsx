@@ -34,13 +34,17 @@ import {
 } from "lucide-react";
 import { FixSuggestionModal } from "./FixSuggestionModal";
 import { ReportPdfModal } from "./ReportPdfModal";
+import { ShareReportModal } from "./ShareReportModal";
 import { getAuthHeaders } from "../utils/authUtils";
+import { UserProfile, DiffStats } from "../types";
 
 interface AnalysisResultsProps {
   analysis: DiffAnalysisResult;
   language: "vi" | "en";
   githubMeta?: GitHubDiffMetadata | null;
   rawDiff?: string;
+  currentUser?: UserProfile | null;
+  stats?: DiffStats;
 }
 
 // Helper to render backticks `code` nicely with highlight syntax
@@ -155,9 +159,12 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
   language,
   githubMeta,
   rawDiff,
+  currentUser,
+  stats,
 }) => {
   const [copiedReport, setCopiedReport] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Auto-Fix state
   const [selectedRisk, setSelectedRisk] = useState<PotentialRisk | null>(null);
@@ -359,6 +366,16 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
                   <span className="text-xs text-zinc-500 font-normal">/10</span>
                 </div>
               </div>
+
+              <button
+                id="btn-share-report"
+                onClick={() => setIsShareModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition cursor-pointer shadow-md shadow-indigo-950/40"
+                title="Tạo liên kết chia sẻ cho người khác xem ở chế độ Viewer"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>{language === "vi" ? "Chia sẻ" : "Share"}</span>
+              </button>
 
               <button
                 id="btn-print-pdf-report"
@@ -808,6 +825,18 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
           </div>
         )}
       </div>
+
+      {/* Share Report Modal (Viewer Link) */}
+      <ShareReportModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        analysis={analysis}
+        diffContent={rawDiff || ""}
+        stats={stats}
+        githubMeta={githubMeta}
+        currentUser={currentUser || null}
+        language={language}
+      />
 
       {/* PDF Export & Print Modal */}
       <ReportPdfModal

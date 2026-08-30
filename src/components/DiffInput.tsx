@@ -25,6 +25,7 @@ import {
   FolderGit2,
   ArrowRight,
   Info,
+  Download,
 } from "lucide-react";
 import { DiffStats, SamplePatch, GitHubDiffMetadata, InputMode, UserProfile } from "../types";
 import { SAMPLE_PATCHES } from "../data/samplePatches";
@@ -220,6 +221,22 @@ export const DiffInput: React.FC<DiffInputProps> = ({
     navigator.clipboard.writeText(diffContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Download the current Diff/Patch to local computer as a .diff / .patch file
+  const handleDownloadDiff = () => {
+    if (!diffContent.trim()) return;
+    const blob = new Blob([diffContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const repoPrefix = githubMeta?.repo ? `${githubMeta.repo.replace(/[^a-zA-Z0-9_-]/g, "_")}_` : "";
+    link.download = `${repoPrefix}patch_${timestamp}.diff`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleLoadLocalSample = (sample: SamplePatch) => {
@@ -448,16 +465,17 @@ export const DiffInput: React.FC<DiffInputProps> = ({
                     ? "bg-zinc-800/80 text-zinc-500 cursor-not-allowed"
                     : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-950/50"
                 }`}
+                title="Lấy mã Diff từ GitHub và nạp vào khung soạn thảo"
               >
                 {urlFetchLoading ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>{language === "vi" ? "Đang tải diff..." : "Fetching..."}</span>
+                    <span>{language === "vi" ? "Đang lấy diff..." : "Fetching..."}</span>
                   </>
                 ) : (
                   <>
-                    <DownloadIcon className="w-3.5 h-3.5" />
-                    <span>{language === "vi" ? "Tải Diff" : "Fetch Diff"}</span>
+                    <GitPullRequest className="w-3.5 h-3.5" />
+                    <span>{language === "vi" ? "Lấy Diff từ GitHub" : "Fetch Diff"}</span>
                   </>
                 )}
               </button>
@@ -644,11 +662,11 @@ export const DiffInput: React.FC<DiffInputProps> = ({
               {rangeLoading ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>{language === "vi" ? "Đang tải diff..." : "Fetching range..."}</span>
+                  <span>{language === "vi" ? "Đang lấy diff..." : "Fetching range..."}</span>
                 </>
               ) : (
                 <>
-                  <DownloadIcon className="w-3.5 h-3.5" />
+                  <GitCompare className="w-3.5 h-3.5" />
                   <span>{language === "vi" ? "Lấy Diff từ GitHub" : "Fetch Diff from GitHub"}</span>
                 </>
               )}
@@ -734,16 +752,41 @@ diff --git a/services/payment.ts b/services/payment.ts
         />
 
         {/* Floating Quick Action Tools in Textarea */}
-        <div className="absolute right-4 bottom-4 flex items-center gap-2">
+        <div className="absolute right-4 bottom-4 flex items-center gap-1.5 flex-wrap justify-end">
           {diffContent && (
-            <button
-              onClick={handleCopy}
-              className="px-2.5 py-1.5 rounded-lg bg-zinc-900/90 text-zinc-300 hover:text-white border border-zinc-700/80 text-xs flex items-center gap-1.5 shadow-lg backdrop-blur cursor-pointer hover:bg-zinc-800 transition"
-              title="Sao chép nội dung diff"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? "Đã chép" : "Copy"}</span>
-            </button>
+            <>
+              <button
+                id="btn-copy-diff-text"
+                onClick={handleCopy}
+                className="px-2.5 py-1.5 rounded-lg bg-zinc-900/90 text-zinc-300 hover:text-white border border-zinc-700/80 text-xs flex items-center gap-1.5 shadow-lg backdrop-blur cursor-pointer hover:bg-zinc-800 transition"
+                title="Sao chép nội dung diff vào clipboard"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? "Đã chép" : "Copy"}</span>
+              </button>
+
+              <button
+                id="btn-download-diff-file"
+                onClick={handleDownloadDiff}
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-950/80 text-emerald-300 hover:text-emerald-100 border border-emerald-700/80 text-xs flex items-center gap-1.5 shadow-lg backdrop-blur cursor-pointer hover:bg-emerald-900 transition font-medium"
+                title="Tải file .diff / .patch này về máy tính của bạn"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{language === "vi" ? "Tải file .diff về máy" : "Download .diff"}</span>
+              </button>
+
+              <button
+                id="btn-clear-diff-text"
+                onClick={() => {
+                  setDiffContent("");
+                  if (setGithubMeta) setGithubMeta(null);
+                }}
+                className="px-2 py-1.5 rounded-lg bg-zinc-900/90 text-zinc-400 hover:text-rose-300 border border-zinc-800 text-xs flex items-center gap-1 shadow-lg backdrop-blur cursor-pointer hover:bg-zinc-800 transition"
+                title="Xóa nội dung Diff"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
 
           <input
@@ -759,12 +802,13 @@ diff --git a/services/payment.ts b/services/payment.ts
           />
 
           <button
+            id="btn-upload-diff-file"
             onClick={() => fileInputRef.current?.click()}
             className="px-2.5 py-1.5 rounded-lg bg-zinc-900/90 text-zinc-300 hover:text-white border border-zinc-700/80 text-xs flex items-center gap-1.5 shadow-lg backdrop-blur cursor-pointer hover:bg-zinc-800 transition"
-            title="Tải file .patch / .diff"
+            title="Tải file .patch / .diff từ máy tính lên"
           >
             <UploadCloud className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{language === "vi" ? "Tải file .patch" : "Upload file"}</span>
+            <span>{language === "vi" ? "Tải file .patch lên" : "Upload .patch"}</span>
           </button>
         </div>
       </div>
@@ -922,23 +966,3 @@ diff --git a/services/payment.ts b/services/payment.ts
     </div>
   );
 };
-
-function DownloadIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      {...props}
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  );
-}
