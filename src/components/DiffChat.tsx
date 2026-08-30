@@ -57,6 +57,7 @@ export const DiffChat: React.FC<DiffChatProps> = ({ currentUser, diffContent, pr
           question: q,
           previousAnalysis,
           chatHistory: messages.slice(-6),
+          language,
         }),
       });
 

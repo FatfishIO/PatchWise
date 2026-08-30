@@ -43,6 +43,113 @@ interface AnalysisResultsProps {
   rawDiff?: string;
 }
 
+// Helper to render backticks `code` nicely with highlight syntax
+const renderTextWithCode = (text: string) => {
+  if (!text) return null;
+  const parts = text.split(/(`[^`]+`)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) {
+          const codeContent = part.slice(1, -1);
+          return (
+            <code
+              key={i}
+              className="px-1.5 py-0.5 mx-0.5 rounded-md bg-indigo-950/70 border border-indigo-700/50 text-indigo-300 font-mono text-[11px] sm:text-xs font-semibold select-all"
+            >
+              {codeContent}
+            </code>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+};
+
+// Helper to render code snippet block
+const CodeSnippetBlock: React.FC<{
+  code: string;
+  type: "vulnerable" | "fixed";
+  title?: string;
+}> = ({ code, type, title }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const lines = code.trim().split("\n");
+  const isVuln = type === "vulnerable";
+
+  return (
+    <div
+      className={`rounded-xl border overflow-hidden font-mono text-xs shadow-sm ${
+        isVuln
+          ? "border-rose-800/50 bg-rose-950/20"
+          : "border-emerald-800/50 bg-emerald-950/20"
+      }`}
+    >
+      <div
+        className={`px-3 py-2 border-b flex items-center justify-between gap-2 ${
+          isVuln
+            ? "border-rose-800/40 bg-rose-950/40 text-rose-300"
+            : "border-emerald-800/40 bg-emerald-950/40 text-emerald-300"
+        }`}
+      >
+        <div className="flex items-center gap-2 font-semibold text-[11px]">
+          {isVuln ? (
+            <>
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <span>{title || "⚠️ Đoạn mã chứa lỗ hổng / khiếm khuyết (Vulnerable Code):"}</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>{title || "✅ Đoạn mã an toàn đã khắc phục (Patched Code):"}</span>
+            </>
+          )}
+        </div>
+        <button
+          onClick={handleCopy}
+          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-sans font-medium transition cursor-pointer ${
+            isVuln
+              ? "bg-rose-900/40 hover:bg-rose-900/70 text-rose-200 border border-rose-700/50"
+              : "bg-emerald-900/40 hover:bg-emerald-900/70 text-emerald-200 border border-emerald-700/50"
+          }`}
+          title="Sao chép đoạn mã"
+        >
+          {copied ? <Check className="w-3 h-3 text-white" /> : <Copy className="w-3 h-3" />}
+          <span>{copied ? "Đã chép" : "Copy"}</span>
+        </button>
+      </div>
+
+      <div className="p-3 overflow-x-auto max-h-80 select-text leading-relaxed bg-zinc-950/60">
+        <pre className="text-zinc-200 font-mono text-[11.5px] leading-relaxed">
+          {lines.map((line, idx) => (
+            <div key={idx} className="table-row hover:bg-white/[0.02]">
+              <span className="table-cell pr-3 text-right select-none text-zinc-500 font-mono text-[10px]">
+                {idx + 1}
+              </span>
+              <span
+                className={`table-cell font-mono ${
+                  isVuln
+                    ? "text-rose-200"
+                    : "text-emerald-200"
+                }`}
+              >
+                {line}
+              </span>
+            </div>
+          ))}
+        </pre>
+      </div>
+    </div>
+  );
+};
+
 export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
   analysis,
   language,
@@ -331,22 +438,27 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
 
         {expandedSections.summary && (
           <div className="p-4 space-y-3.5 bg-zinc-950/40">
-            <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed font-sans">
-              {analysis.summary}
-            </p>
+            <div className="text-xs sm:text-sm text-zinc-200 leading-relaxed font-sans">
+              {renderTextWithCode(analysis.summary)}
+            </div>
 
             {/* Key Changes List */}
             {analysis.keyChanges?.length > 0 && (
               <div>
-                <h5 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-2 font-mono flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                  {language === "vi" ? "Các thay đổi cốt lõi:" : "Key Changes:"}
+                <h5 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-2.5 font-mono flex items-center gap-1.5">
+                  <Code2 className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>{language === "vi" ? "Các thay đổi cốt lõi kèm mã nguồn (Code-Centric Changes):" : "Key Code-Centric Changes:"}</span>
                 </h5>
-                <ul className="space-y-1.5">
+                <ul className="space-y-2">
                   {analysis.keyChanges.map((change, idx) => (
-                    <li key={idx} className="text-xs text-zinc-300 flex items-start gap-2 leading-relaxed">
-                      <span className="text-indigo-400 font-bold shrink-0 mt-0.5">•</span>
-                      <span>{change}</span>
+                    <li
+                      key={idx}
+                      className="text-xs text-zinc-200 flex items-start gap-2.5 leading-relaxed p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors"
+                    >
+                      <span className="w-5 h-5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center text-[10px] font-mono font-bold shrink-0 mt-0.5">
+                        {idx + 1}
+                      </span>
+                      <span className="pt-0.5 flex-1">{renderTextWithCode(change)}</span>
                     </li>
                   ))}
                 </ul>
@@ -440,7 +552,138 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
         )}
       </div>
 
-      {/* 3. Chi tiết Nguy cơ Rủi ro tiềm ẩn (Potential Risks Breakdown) */}
+      {/* 3. Chi tiết Lỗ hổng & Đoạn Mã Nguồn (Vulnerability & Code Snippets Walkthrough) */}
+      <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden shadow-lg">
+        <div
+          onClick={() => toggleSection("hunks")}
+          className="p-4 bg-zinc-900/90 hover:bg-zinc-850 cursor-pointer flex items-center justify-between gap-3 border-b border-zinc-800/80 select-none transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
+              <Code2 className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-semibold text-zinc-100">
+                  {language === "vi"
+                    ? "3. Chi tiết Lỗ hổng & Trích dẫn Mã nguồn (Vulnerability & Code Snippets)"
+                    : "3. Vulnerability & Code Snippet Walkthrough"}
+                </h4>
+                {analysis.hunkInsights && analysis.hunkInsights.length > 0 && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-mono font-bold border border-sky-500/30">
+                    {analysis.hunkInsights.length} {language === "vi" ? "Khối code" : "Blocks"}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-400">
+                {language === "vi"
+                  ? "Giải thích đoạn code có lỗ hổng gì, đã được vá thế nào và đối chiếu đoạn mã trước/sau khi sửa"
+                  : "Detailed breakdown of the flaw, how it was patched, and before/after code snippets"}
+              </p>
+            </div>
+          </div>
+          {expandedSections.hunks ? (
+            <ChevronUp className="w-4 h-4 text-zinc-400" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-zinc-400" />
+          )}
+        </div>
+
+        {expandedSections.hunks && (
+          <div className="p-4 space-y-4 bg-zinc-950/40">
+            {analysis.hunkInsights && analysis.hunkInsights.length > 0 ? (
+              analysis.hunkInsights.map((hunk, idx) => (
+                <div
+                  key={idx}
+                  className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-3.5 hover:border-zinc-700/80 transition-colors shadow-sm"
+                >
+                  {/* Header: File & Vulnerability Type */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-zinc-800">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold text-sky-300 flex items-center gap-1.5">
+                        <Code2 className="w-3.5 h-3.5 text-sky-400" />
+                        {hunk.fileOrLocation}
+                      </span>
+                    </div>
+                    {hunk.vulnerabilityType && (
+                      <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 uppercase">
+                        🚨 {hunk.vulnerabilityType}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 1. Lỗ hổng là gì? */}
+                  <div className="p-3 rounded-lg bg-rose-950/20 border border-rose-900/40 space-y-1">
+                    <h5 className="text-xs font-semibold text-rose-300 flex items-center gap-1.5 font-mono">
+                      <span>🔍 {language === "vi" ? "Lỗ hổng / Khiếm khuyết là gì?" : "What is the vulnerability?"}</span>
+                    </h5>
+                    <div className="text-xs text-zinc-200 leading-relaxed font-sans">
+                      {renderTextWithCode(hunk.vulnerabilityExplanation || hunk.explanation)}
+                    </div>
+                  </div>
+
+                  {/* 2. Đã được vá thế nào? */}
+                  <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-900/40 space-y-1">
+                    <h5 className="text-xs font-semibold text-emerald-300 flex items-center gap-1.5 font-mono">
+                      <span>🛡️ {language === "vi" ? "Đoạn code đã được vá như thế nào?" : "How was it patched?"}</span>
+                    </h5>
+                    <div className="text-xs text-zinc-200 leading-relaxed font-sans">
+                      {renderTextWithCode(hunk.patchExplanation || analysis.solutionApproach || hunk.explanation)}
+                    </div>
+                  </div>
+
+                  {/* 3. Đoạn code chứa lỗ hổng (Vulnerable Code Snippet) */}
+                  {hunk.vulnerableSnippet && (
+                    <div className="space-y-1.5 pt-1">
+                      <CodeSnippetBlock
+                        code={hunk.vulnerableSnippet}
+                        type="vulnerable"
+                        title={
+                          language === "vi"
+                            ? "⚠️ Đoạn mã nguồn chứa lỗ hổng / khiếm khuyết (Before Patch):"
+                            : "⚠️ Vulnerable Code Snippet (Before Patch):"
+                        }
+                      />
+                    </div>
+                  )}
+
+                  {/* 4. Đoạn code sau khi vá an toàn (Fixed Code Snippet) */}
+                  {hunk.fixedSnippet && (
+                    <div className="space-y-1.5 pt-1">
+                      <CodeSnippetBlock
+                        code={hunk.fixedSnippet}
+                        type="fixed"
+                        title={
+                          language === "vi"
+                            ? "✅ Đoạn mã nguồn an toàn sau khi vá (After Patch):"
+                            : "✅ Patched & Safe Code Snippet (After Patch):"
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 text-xs text-zinc-400 space-y-3">
+                <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
+                  <h5 className="font-semibold text-zinc-300 mb-1">
+                    {language === "vi" ? "🔍 Vấn đề xử lý:" : "🔍 Problem Addressed:"}
+                  </h5>
+                  <p className="text-zinc-200">{analysis.problemAddressed}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
+                  <h5 className="font-semibold text-zinc-300 mb-1">
+                    {language === "vi" ? "🛡️ Cơ chế khắc phục:" : "🛡️ Solution Approach:"}
+                  </h5>
+                  <p className="text-zinc-200">{analysis.solutionApproach}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 4. Chi tiết Nguy cơ Rủi ro tiềm ẩn (Potential Risks Breakdown) */}
       <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden shadow-lg">
         <div
           onClick={() => toggleSection("risks")}
@@ -452,7 +695,7 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
             </div>
             <div>
               <h4 className="text-sm font-semibold text-zinc-100">
-                {language === "vi" ? "3. Chi tiết Nguy cơ Rủi ro (Potential Risks)" : "3. Detailed Potential Risks"}
+                {language === "vi" ? "4. Chi tiết Nguy cơ Rủi ro (Potential Risks)" : "4. Detailed Potential Risks"}
               </h4>
               <p className="text-[11px] text-zinc-400">
                 {language === "vi"
@@ -522,7 +765,7 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
         )}
       </div>
 
-      {/* 4. Khuyến nghị hành động cho Reviewer (Recommendations) */}
+      {/* 5. Khuyến nghị hành động cho Reviewer (Recommendations) */}
       <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden shadow-lg">
         <div
           onClick={() => toggleSection("recommendations")}
@@ -535,8 +778,8 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
             <div>
               <h4 className="text-sm font-semibold text-zinc-100">
                 {language === "vi"
-                  ? "4. Khuyến nghị & Checklist Kiểm thử (Recommendations)"
-                  : "4. Reviewer Checklist & Recommendations"}
+                  ? "5. Khuyến nghị & Checklist Kiểm thử (Recommendations)"
+                  : "5. Reviewer Checklist & Recommendations"}
               </h4>
               <p className="text-[11px] text-zinc-400">
                 {language === "vi" ? "Những việc tác giả và reviewer cần kiểm tra trước khi merge" : "Pre-merge checklist and testing suggestions"}
@@ -565,48 +808,6 @@ ${analysis.recommendations.map((rec) => `- ${rec}`).join("\n")}
           </div>
         )}
       </div>
-
-      {/* 5. Giải thích từng khối code (Hunk-by-hunk Insights) if available */}
-      {analysis.hunkInsights && analysis.hunkInsights.length > 0 && (
-        <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden shadow-lg">
-          <div
-            onClick={() => toggleSection("hunks")}
-            className="p-4 bg-zinc-900/90 hover:bg-zinc-850 cursor-pointer flex items-center justify-between gap-3 border-b border-zinc-800/80 select-none transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                <Code2 className="w-4 h-4" />
-              </div>
-              <div>
-                <h4 className="text-sm font-semibold text-zinc-100">
-                  {language === "vi" ? "5. Giải thích Khối Code (Hunk Explanations)" : "5. Code Block Explanations"}
-                </h4>
-                <p className="text-[11px] text-zinc-400">
-                  {language === "vi" ? "Chi tiết logic từng phần được sửa đổi" : "Detailed logic walkthrough per hunk"}
-                </p>
-              </div>
-            </div>
-            {expandedSections.hunks ? (
-              <ChevronUp className="w-4 h-4 text-zinc-400" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-zinc-400" />
-            )}
-          </div>
-
-          {expandedSections.hunks && (
-            <div className="p-4 space-y-2.5 bg-zinc-950/40">
-              {analysis.hunkInsights.map((hunk, idx) => (
-                <div key={idx} className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-1">
-                  <div className="text-[11px] font-mono font-semibold text-sky-300">
-                    📍 {hunk.fileOrLocation}
-                  </div>
-                  <p className="text-xs text-zinc-300 leading-relaxed">{hunk.explanation}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* PDF Export & Print Modal */}
       <ReportPdfModal

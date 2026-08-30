@@ -170,9 +170,6 @@ type Role = "admin" | "user" | "viewer";
 
 const PREDEFINED_ADMIN_EMAILS = [
   "minhhoangdo3107@gmail.com",
-  "admin@patchwise.internal",
-  "security-lead@patchwise.internal",
-  "admin@patchwise.dev",
 ];
 
 function requireRole(allowedRoles: Role[]) {
@@ -368,9 +365,9 @@ app.post("/api/github/fetch-diff", requireRole(["admin", "user"]), async (req, r
     });
 
     if (!diffResponse.ok) {
-      if (diffResponse.status === 404) {
-        return res.status(404).json({
-          error: `Không tìm thấy repository/PR/commit trên GitHub (${targetOwner}/${targetRepo}). Nếu là kho lưu trữ riêng tư (Private Repo), vui lòng cung cấp GitHub Personal Access Token.`,
+      if (diffResponse.status === 404 || diffResponse.status === 422) {
+        return res.status(diffResponse.status).json({
+          error: `GitHub không tìm thấy mã Commit / PR này trên kho lưu trữ ${targetOwner}/${targetRepo} (${diffResponse.status}). Mã SHA có thể không tồn tại, đã bị rebase/xóa hoặc thuộc về fork khác. Vui lòng kiểm tra lại đường link hoặc SHA.`,
         });
       }
       if (diffResponse.status === 403) {
@@ -424,13 +421,35 @@ app.post("/api/analyze-diff", requireRole(["admin", "user"]), async (req, res) =
 
     const ai = getGeminiClient();
 
+    const languageRule =
+      language === "en"
+        ? `LANGUAGE REQUIREMENT: All descriptive text, summary, headline, keyChanges, intent, risks, recommendations, strengths, and hunkInsights MUST be written 100% in fluent English.`
+        : `QUY TẮC BẮT BUỘC VỀ ĐỒNG NHẤT NGÔN NGỮ (100% TIẾNG VIỆT):
+- Toàn bộ nội dung diễn giải, tóm tắt (summary), tiêu đề (headline), danh sách thay đổi cốt lõi (keyChanges), phân tích nguyên nhân & mục đích (intentDescription, problemAddressed, solutionApproach), lý do rủi ro (riskReason), danh sách nguy cơ tiềm ẩn (potentialRisks[].description), khuyến nghị kiểm thử (recommendations), điểm mạnh (strengths), và giải thích từng đoạn code (hunkInsights[].explanation) BẮT BUỘC 100% PHẢI ĐƯỢC VIẾT BẰNG TIẾNG VIỆT HOÀN TOÀN.
+- TUYỆT ĐỐI KHÔNG sao chép nguyên văn câu tiếng Anh từ commit log, PR description hay code comment vào summary hoặc keyChanges. Hãy dịch và diễn đạt lại toàn bộ ngữ nghĩa sang Tiếng Việt kỹ thuật chuyên nghiệp, mạch lạc, dễ hiểu.
+- CHỈ GIỮ NGUYÊN dạng định dạng mã (code identifier) đối với tên biến, tên hàm, tên file, tên struct, hằng số (ví dụ: \`check_add_overflow\`, \`end_off\`, \`cifs_readv_receive\`, \`handle_read_data\`).
+- VÍ DỤ SAI: "The patch addresses potential integer overflow vulnerabilities in SMB client..."
+- VÍ DỤ ĐÚNG: "Bản vá xử lý các lỗ hổng tràn số nguyên tiềm ẩn trong logic xử lý phản hồi đọc dữ liệu của SMB client. Bản vá bổ sung cơ chế kiểm tra an toàn bằng hàm \`check_add_overflow\` khi tính toán offset cuối của bộ đệm dữ liệu..."`;
+
     const systemInstruction = `Bạn là một chuyên gia phân tích mã nguồn và kỹ sư phần mềm cao cấp (Senior Staff Software Engineer & Security Auditor).
 Nhiệm vụ của bạn là phân tích chi tiết một đoạn Git Diff / Patch được cung cấp, sau đó trả về kết quả định dạng JSON có cấu trúc chặt chẽ.
 
+YÊU CẦU ĐẶC BIỆT QUAN TRỌNG VỀ TÓM TẮT & GIẢI THÍCH LỖ HỔNG KÈM CODE (CODE-CENTRIC WALKTHROUGH):
+- Vì đối tượng sử dụng là các kỹ sư phần mềm làm việc trực tiếp với code, **tuyệt đối KHÔNG tóm tắt hay đánh giá một cách chung chung chỉ toàn chữ kết luận**.
+- Trong phần tóm tắt (\`summary\`) và các thay đổi cốt lõi (\`keyChanges\`), BẮT BUỘC phải **vừa giải thích logic vừa trích dẫn/đính kèm chính xác đoạn mã code (code snippets, inline identifiers, tên hàm, tên biến, biểu thức before/after)**.
+- BẮT BUỘC cung cấp danh sách \`hunkInsights\` chi tiết cho từng phần code quan trọng, trong đó:
+  1. \`fileOrLocation\`: Tên file hoặc tên hàm/module bị sửa đổi.
+  2. \`vulnerabilityType\`: Tên loại lỗ hổng / khiếm khuyết (ví dụ: Cross-Site Scripting (XSS), Integer Overflow, Unvalidated Buffer Size, Race Condition, Missing Null Check, SQL Injection, Logic Flaw...).
+  3. \`vulnerabilityExplanation\`: Giải thích rõ ràng: **Đoạn code này có lỗ hổng/nguy cơ gì? Cơ chế phát sinh lỗi và hậu quả nếu bị khai thác hoặc chạy sai?**
+  4. \`patchExplanation\`: Giải thích rõ: **Đoạn code đã được vá/xử lý như thế nào để đảm bảo an toàn?**
+  5. \`vulnerableSnippet\`: **Trích dẫn chính xác đoạn code cũ CHỨA LỖ HỔNG / KHIẾM KHUYẾT (trước khi vá)** để lập trình viên xem trực tiếp đoạn mã nguồn có vấn đề.
+  6. \`fixedSnippet\`: **Trích dẫn đoạn code mới AN TOÀN ĐÃ ĐƯỢC VÁ (sau khi sửa)**.
+  7. \`explanation\`: Tóm tắt 1-2 câu ngắn gọn về điểm cốt lõi.
+
 Các yêu cầu phân tích chính:
-1. **Tóm tắt (Summary)**:
-   - Mô tả ngắn gọn, súc tích về những gì thay đổi.
-   - Liệt kê các điểm thay đổi chính theo từng file/hàm/component.
+1. **Tóm tắt & Thay đổi cốt lõi gắn liền với mã nguồn (Code-First Summary & Key Changes)**:
+   - Đoạn văn tóm tắt (\`summary\`): Giải thích mạch lạc cơ chế sửa đổi, kèm theo các hàm, cấu trúc dữ liệu hoặc biến mấu chốt được thêm/sửa/xóa.
+   - Danh sách thay đổi cốt lõi (\`keyChanges\`): Từng mục phải chỉ rõ: Tên hàm/vị trí + logic code cũ vs code mới + lý do kỹ thuật.
 2. **Phân tích nguyên nhân & Mục đích của lập trình viên (Root Cause / Intent Analysis)**:
    - Xác định rõ phân loại mục đích (Bug Fix, Feature Addition, Performance Optimization, Security Patch, Refactoring, Config/Dependency, v.v.).
    - Giải thích tại sao bản patch này được tạo ra, vấn đề nó muốn giải quyết là gì, và cách tiếp cận kỹ thuật của lập trình viên.
@@ -439,10 +458,10 @@ Các yêu cầu phân tích chính:
    - Đưa ra điểm rủi ro từ 1 đến 10.
    - Phân tích cặn kẽ các nguy cơ tiềm ẩn: Khả năng sinh lỗi hồi quy (regression), lỗi bảo mật (security vulnerabilities: injection, overflow, unauthenticated access, IDOR...), ảnh hưởng hiệu năng (performance / memory leak), phá vỡ tương thích ngược (breaking API changes), edge cases thiếu sót (null checks, boundary conditions, concurrency race conditions), thiếu test coverage.
    - Đưa ra các khuyến nghị kiểm thử và lưu ý quan trọng trước khi merge.
-4. **Giải thích chi tiết các đoạn code chính (Code Insights / Notable Hunks)**:
-   - Trích dẫn các đoạn thay đổi quan trọng và giải thích logic before/after ngắn gọn, dễ hiểu.
+4. **Chi tiết từng đoạn code & Lỗ hổng (hunkInsights)**:
+   - Phân tích và trích dẫn đầy đủ đoạn code chứa lỗ hổng cùng đoạn code đã khắc phục.
 
-Ngôn ngữ phản hồi: ${language === "en" ? "English" : "Tiếng Việt (kết hợp các thuật ngữ kỹ thuật tiêu chuẩn của ngành CNTT)"}.`;
+${languageRule}`;
 
     const promptText = `Hãy phân tích bản Git Diff / Patch sau đây và trả về kết quả theo đúng cấu trúc JSON đã định nghĩa:
 
@@ -450,7 +469,9 @@ Ngôn ngữ phản hồi: ${language === "en" ? "English" : "Tiếng Việt (k�
 ${diffContent}
 \`\`\`
 
-Trọng tâm bổ sung: ${focusArea === "security" ? "Tập trung sâu vào khía cạnh Bảo mật & Lỗ hổng" : focusArea === "performance" ? "Tập trung sâu vào Hiệu năng & Tối ưu hóa bộ nhớ/tài nguyên" : focusArea === "reliability" ? "Tập trung sâu vào Độ ổn định, Xử lý lỗi & Tương thích ngược" : "Toàn diện (Tóm tắt, Nguyên nhân, Rủi ro, Bảo mật, Hiệu năng, Khuyến nghị)"}.`;
+Trọng tâm phân tích: ${focusArea === "security" ? "Tập trung sâu vào khía cạnh Bảo mật & Lỗ hổng" : focusArea === "performance" ? "Tập trung sâu vào Hiệu năng & Tối ưu hóa bộ nhớ/tài nguyên" : focusArea === "reliability" ? "Tập trung sâu vào Độ ổn định, Xử lý lỗi & Tương thích ngược" : "Toàn diện (Tóm tắt, Nguyên nhân, Rủi ro, Bảo mật, Hiệu năng, Khuyến nghị)"}.
+
+${languageRule}`;
 
     // Call Gemini with fallback across fast, high-quota models
     const candidateModels = [
@@ -481,12 +502,12 @@ Trọng tâm bổ sung: ${focusArea === "security" ? "Tập trung sâu vào khí
                   },
                   summary: {
                     type: Type.STRING,
-                    description: "Đoạn văn tóm tắt chi tiết các thay đổi trong patch",
+                    description: "Đoạn văn tóm tắt chi tiết bản patch, BẮT BUỘC giải thích gắn liền với các đoạn code, tên hàm, biến hoặc biểu thức chính được thay đổi (code-centric walkthrough)",
                   },
                   keyChanges: {
                     type: Type.ARRAY,
                     items: { type: Type.STRING },
-                    description: "Danh sách các điểm thay đổi cốt lõi",
+                    description: "Danh sách các điểm thay đổi cốt lõi. Mỗi mục BẮT BUỘC phải kèm theo mã code, tên hàm/biến hoặc biểu thức before/after cụ thể thay vì chỉ kết luận chung chung",
                   },
                   impactedComponents: {
                     type: Type.ARRAY,
@@ -564,16 +585,36 @@ Trọng tâm bổ sung: ${focusArea === "security" ? "Tập trung sâu vào khí
                       properties: {
                         fileOrLocation: {
                           type: Type.STRING,
-                          description: "Tên file hoặc vị trí hàm",
+                          description: "Tên file, component hoặc vị trí hàm bị sửa đổi",
+                        },
+                        vulnerabilityType: {
+                          type: Type.STRING,
+                          description: "Tên lỗ hổng/lỗi kỹ thuật (ví dụ: Cross-Site Scripting (XSS), Integer Overflow, Unchecked Buffer Bounds, Race Condition, Missing Validation, Logic Flaw)",
+                        },
+                        vulnerabilityExplanation: {
+                          type: Type.STRING,
+                          description: "Giải thích cụ thể: Đoạn code này có lỗ hổng gì? Cơ chế phát sinh lỗi và hậu quả?",
+                        },
+                        patchExplanation: {
+                          type: Type.STRING,
+                          description: "Giải thích: Đoạn code này đã được vá/khắc phục như thế nào?",
+                        },
+                        vulnerableSnippet: {
+                          type: Type.STRING,
+                          description: "Trích dẫn nguyên văn đoạn code cũ CHỨA LỖ HỔNG / KHIẾM KHUYẾT (trước khi vá) để lập trình viên xem trực tiếp mã nguồn có vấn đề",
+                        },
+                        fixedSnippet: {
+                          type: Type.STRING,
+                          description: "Trích dẫn đoạn code mới AN TOÀN ĐÃ ĐƯỢC VÁ (sau khi sửa)",
                         },
                         explanation: {
                           type: Type.STRING,
-                          description: "Giải thích logic thay đổi ở đoạn code này",
+                          description: "Tóm tắt ngắn gọn logic thay đổi",
                         },
                       },
-                      required: ["fileOrLocation", "explanation"],
+                      required: ["fileOrLocation", "vulnerabilityExplanation", "patchExplanation", "explanation"],
                     },
-                    description: "Giải thích chi tiết cho các phần code quan trọng",
+                    description: "Chi tiết các đoạn code: Lỗ hổng là gì, đã được vá thế nào, kèm theo trích dẫn đoạn code chứa lỗ hổng (vulnerableSnippet) và đoạn code đã sửa (fixedSnippet)",
                   },
                 },
                 required: [
@@ -632,7 +673,7 @@ Trọng tâm bổ sung: ${focusArea === "security" ? "Tập trung sâu vào khí
 // Follow-up Q&A endpoint
 app.post("/api/diff-chat", requireRole(["admin", "user"]), async (req, res) => {
   try {
-    const { diffContent, question, previousAnalysis, chatHistory = [] } = req.body;
+    const { diffContent, question, previousAnalysis, chatHistory = [], language = "vi" } = req.body;
 
     if (!diffContent || !question) {
       return res.status(400).json({ error: "Thiếu thông tin diffContent hoặc question." });
@@ -640,10 +681,15 @@ app.post("/api/diff-chat", requireRole(["admin", "user"]), async (req, res) => {
 
     const ai = getGeminiClient();
 
-    const systemInstruction = `Bạn là trợ lý AI chuyên gia giải đáp thắc mắc về Git Diff / Patch.
+    const systemInstruction = `Bạn là trợ lý AI chuyên gia giải đáp thắc mắc về Git Diff / Patch và kiểm toán an ninh mã nguồn.
 Bạn có ngữ cảnh về đoạn diff và kết quả phân tích trước đó.
-Hãy trả lời câu hỏi của người dùng một cách chính xác, thực tế, đưa ra code minh họa (Unit test, refactor patch, edge case checks) nếu được hỏi.
-Trả lời bằng ngôn ngữ mà người dùng sử dụng (mặc định là Tiếng Việt).`;
+Hãy trả lời câu hỏi của người dùng một cách chính xác, sâu sắc, thực tế, kèm code minh họa (Unit test, refactor patch, edge case checks) nếu thích hợp.
+
+${
+  language === "en"
+    ? "All your response must be in English."
+    : "BẮT BUỘC trả lời 100% bằng Tiếng Việt kỹ thuật chuẩn mực, mạch lạc, dễ hiểu (giữ nguyên tên hàm/biến/file trong code blocks)."
+}`;
 
     const userPrompt = `Ngữ cảnh bản Git Diff:
 \`\`\`diff
@@ -1128,18 +1174,18 @@ app.get("/api/admin/analytics/trends", requireRole(["admin"]), (req, res) => {
 app.get("/api/admin/analytics/top-users", requireRole(["admin"]), (_req, res) => {
   const topUsers = [
     {
-      email: "security.lead@patchwise.internal",
-      name: "Security Lead",
-      role: "admin",
+      email: "developer@patchwise.internal",
+      name: "Sarah Chen",
+      role: "user",
       analyses_count: 32,
       tokens_used: 54300,
       avg_risk_score: 6.8,
       last_active: Date.now() - 10 * 60 * 1000,
     },
     {
-      email: "core.maintainer@patchwise.internal",
-      name: "Core Maintainer",
-      role: "admin",
+      email: "auditor@patchwise.internal",
+      name: "Marcus Brody",
+      role: "viewer",
       analyses_count: 24,
       tokens_used: 39800,
       avg_risk_score: 5.2,
@@ -1237,12 +1283,18 @@ app.post("/api/analyze/stream", requireRole(["admin", "user"]), async (req, res)
     });
 
     const ai = getGeminiClient();
-    const systemInstruction = `Bạn là Senior Staff Software Engineer & Security Auditor. Phân tích Git Diff và trả về JSON chuẩn xác.`;
+    const systemInstruction = `Bạn là Senior Staff Software Engineer & Security Auditor. Phân tích Git Diff và trả về JSON chuẩn xác.
+YÊU CẦU QUAN TRỌNG: Trong summary và keyChanges, BẮT BUỘC phải giải thích gắn liền với các đoạn code, tên biến, tên hàm hoặc biểu thức before/after cụ thể (code-centric walkthrough) thay vì chỉ kết luận chung chung.
+${
+  language === "en"
+    ? "All output fields (headline, summary, keyChanges, intent, risks, recommendations) must be 100% in English."
+    : "BẮT BUỘC toàn bộ nội dung diễn giải (headline, summary, keyChanges, intentDescription, problemAddressed, solutionApproach, riskReason, potentialRisks, recommendations) phải viết 100% bằng Tiếng Việt kỹ thuật chuẩn mực (không để nguyên câu tiếng Anh từ commit log)."
+}`;
     const promptText = `Phân tích Git Diff sau:
 \`\`\`diff
 ${diffContent.slice(0, 18000)}
 \`\`\`
-Trọng tâm: ${focusArea}. Ngôn ngữ: ${language === "en" ? "English" : "Tiếng Việt"}.`;
+Trọng tâm: ${focusArea}. Ngôn ngữ yêu cầu: ${language === "en" ? "100% English" : "100% Tiếng Việt"}.`;
 
     sendEvent("progress", {
       type: "summary",
@@ -1317,6 +1369,11 @@ app.post("/api/analyze/fix-suggestion", requireRole(["admin", "user"]), async (r
     const ai = getGeminiClient();
     const systemInstruction = `Bạn là Senior Security Engineer & Code Refactoring Expert.
 Nhiệm vụ: Cung cấp bản vá code an toàn (Patch / Fix) cho một nguy cơ hoặc lỗi được phát hiện trong Git Diff.
+${
+  language === "en"
+    ? "Return explanation and comments in fluent English."
+    : "BẮT BUỘC giải thích (explanation) 100% bằng Tiếng Việt kỹ thuật chuẩn mực, rõ ràng, chính xác."
+}
 Trả về JSON theo format:
 {
   "vulnerabilityType": "Tên loại lỗ hổng",
@@ -1336,7 +1393,7 @@ Trả về JSON theo format:
 ${(diffContent || "").slice(0, 8000)}
 \`\`\`
 
-Hãy tạo bản vá sửa lỗi an toàn, code sạch, tối ưu hiệu năng. Ngôn ngữ phản hồi: ${language === "en" ? "English" : "Tiếng Việt"}.`;
+Hãy tạo bản vá sửa lỗi an toàn, code sạch, tối ưu hiệu năng. ${language === "en" ? "Response language: English" : "Ngôn ngữ giải thích: Bắt buộc 100% Tiếng Việt"}.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.1-flash-lite",
@@ -1378,6 +1435,11 @@ app.post("/api/compare/pr-analysis", requireRole(["admin", "user"]), async (req,
 
     const ai = getGeminiClient();
     const systemInstruction = `Bạn là Technical Lead & Release Manager. So sánh 2 Pull Requests / Patches và đưa ra quyết định merge an toàn.
+${
+  language === "en"
+    ? "All output fields (rationale, keyDifferences, etc.) must be written in English."
+    : "BẮT BUỘC toàn bộ nội dung phân tích (rationale, keyDifferences, v.v.) phải viết 100% bằng Tiếng Việt kỹ thuật chuẩn mực."
+}
 Trả về JSON:
 {
   "recommendation": "PR_A" | "PR_B" | "BOTH_SAFE" | "NEITHER_SAFE",
@@ -1399,7 +1461,9 @@ Mức độ rủi ro: ${prB.riskLevel} (${prB.riskScore}/10)
 Tóm tắt: ${prB.analysis?.summary || ""}
 Nguy cơ: ${JSON.stringify(prB.analysis?.potentialRisks || [])}
 
-Hãy đánh giá xem PR nào an toàn hơn để merge trước và chỉ ra các điểm khác biệt mấu chốt.`;
+Hãy đánh giá xem PR nào an toàn hơn để merge trước và chỉ ra các điểm khác biệt mấu chốt. ${
+  language === "en" ? "Respond in English." : "Bắt buộc trả lời 100% bằng Tiếng Việt."
+}`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.1-flash-lite",

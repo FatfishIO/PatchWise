@@ -221,7 +221,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
     }
 
     const calculatedRole = determineRoleForEmail(customEmail.trim());
-    const finalRole = customRole !== "user" ? customRole : calculatedRole;
+    // In trial mode, only USER or VIEWER can be selected; ADMIN is strictly reserved for verified admin emails
+    let finalRole: UserRole = customRole === "viewer" ? "viewer" : "user";
+    if (calculatedRole === "admin") {
+      finalRole = "admin";
+    }
 
     const userProfile: Partial<UserProfile> & { email: string; name: string } = {
       email: customEmail.trim(),
@@ -395,66 +399,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
                   </span>
                 </div>
 
-                <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80 gap-3">
+                <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
                   {/* GIS Rendered Button */}
                   <div
                     id="g_id_signin"
                     ref={googleBtnRef}
                     className="flex items-center justify-center min-w-[280px]"
                   />
-
-                  {/* Direct Popup OAuth Button */}
-                  <button
-                    id="btn-google-popup-login"
-                    type="button"
-                    onClick={handleGooglePopupSignIn}
-                    disabled={isAuthenticating}
-                    className="w-full max-w-[320px] flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-medium text-xs shadow-md hover:shadow-lg transition-all cursor-pointer border border-zinc-200 disabled:opacity-50"
-                  >
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                      />
-                    </svg>
-                    <span>
-                      {isAuthenticating
-                        ? "Đang xác thực tài khoản..."
-                        : "Đăng nhập với Google Popup"}
-                    </span>
-                  </button>
                 </div>
               </div>
 
               {/* Divider */}
               <div className="relative flex items-center justify-center">
                 <div className="border-t border-zinc-800 w-full" />
-                <span className="bg-zinc-900 px-3 text-[11px] text-zinc-500 uppercase tracking-widest font-mono shrink-0">
-                  Hoặc thử nghiệm nhanh (Demo Roles)
+                <span className="bg-zinc-900 px-3 text-[11px] text-zinc-400 uppercase tracking-wider font-mono shrink-0">
+                  {language === "vi"
+                    ? "Dùng thử nhanh (Chỉ hỗ trợ USER & VIEWER)"
+                    : "Quick Demo Roles (USER & VIEWER only)"}
                 </span>
               </div>
 
-              {/* Fast 1-Click Demo Accounts */}
+              {/* Fast 1-Click Demo Accounts (Only USER and VIEWER) */}
               <div className="space-y-2">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {DEMO_USERS.map((demo) => {
-                    const isAdm = demo.role === "admin";
                     const isView = demo.role === "viewer";
-                    const roleColor = isAdm
-                      ? "border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-300"
-                      : isView
+                    const roleColor = isView
                       ? "border-amber-500/30 hover:border-amber-500/60 bg-amber-500/5 hover:bg-amber-500/10 text-amber-300"
                       : "border-emerald-500/30 hover:border-emerald-500/60 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-300";
 
@@ -463,16 +433,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
                         key={demo.id}
                         type="button"
                         onClick={() => handleDemoLogin(demo)}
-                        className={`p-2.5 rounded-xl border text-left flex flex-col justify-between gap-1.5 transition-all cursor-pointer group ${roleColor}`}
+                        className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer group ${roleColor}`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-zinc-900 border border-current font-mono">
-                            {demo.role}
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-zinc-900 border border-current font-mono">
+                            {demo.role === "user" ? "USER (Lập trình viên)" : "VIEWER (Người xem)"}
                           </span>
-                          <ArrowRight className="w-3 h-3 opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                          <ArrowRight className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
                         </div>
                         <div>
-                          <p className="text-xs font-semibold text-white truncate">{demo.name.split("(")[0]}</p>
+                          <p className="text-xs font-semibold text-white truncate">{demo.name}</p>
                           <p className="text-[10px] text-zinc-400 font-mono truncate">{demo.email}</p>
                         </div>
                       </button>
@@ -484,7 +454,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
               {/* Custom Email Input Toggle */}
               <details className="group border-t border-zinc-800/80 pt-3">
                 <summary className="text-[11px] text-zinc-400 hover:text-zinc-200 cursor-pointer flex items-center justify-between list-none py-1 font-mono">
-                  <span>+ Đăng nhập bằng Email tùy chỉnh</span>
+                  <span>+ Đăng nhập dùng thử bằng Email tùy chỉnh</span>
                   <span className="text-xs group-open:rotate-180 transition-transform">▼</span>
                 </summary>
 
@@ -514,15 +484,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
 
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <label className="text-[10px] text-zinc-400">Chọn Role:</label>
+                      <label className="text-[10px] text-zinc-400">Vai trò dùng thử:</label>
                       <select
                         value={customRole}
                         onChange={(e) => setCustomRole(e.target.value as UserRole)}
-                        className="bg-zinc-950 text-xs px-2 py-1 rounded border border-zinc-800 text-zinc-200 font-mono focus:outline-none"
+                        className="bg-zinc-950 text-xs px-2.5 py-1 rounded border border-zinc-800 text-zinc-200 font-mono focus:outline-none"
                       >
-                        <option value="user">USER</option>
-                        <option value="admin">ADMIN</option>
-                        <option value="viewer">VIEWER</option>
+                        <option value="user">USER (Được phân tích & chat)</option>
+                        <option value="viewer">VIEWER (Chỉ xem báo cáo)</option>
                       </select>
                     </div>
 
@@ -530,7 +499,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
                       type="submit"
                       className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition cursor-pointer"
                     >
-                      Đăng nhập
+                      Dùng thử ngay
                     </button>
                   </div>
                 </form>

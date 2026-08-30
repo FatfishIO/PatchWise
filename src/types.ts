@@ -18,6 +18,11 @@ export interface PotentialRisk {
 
 export interface HunkInsight {
   fileOrLocation: string;
+  vulnerabilityType?: string;
+  vulnerabilityExplanation?: string;
+  patchExplanation?: string;
+  vulnerableSnippet?: string;
+  fixedSnippet?: string;
   explanation: string;
 }
 

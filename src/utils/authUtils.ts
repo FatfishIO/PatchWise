@@ -9,32 +9,10 @@ export const DEFAULT_GOOGLE_CLIENT_ID = "438350877870-edrdshm63p5atqp71un13ua6a0
 // Predefined Admin Emails (Automatically granted Admin role)
 export const PREDEFINED_ADMIN_EMAILS: string[] = [
   "minhhoangdo3107@gmail.com",
-  "admin@patchwise.internal",
-  "security-lead@patchwise.internal",
 ];
 
-// Demo accounts for rapid testing & evaluation
+// Demo accounts for rapid testing & evaluation (Trial only allowed for USER and VIEWER roles)
 export const DEMO_USERS: UserProfile[] = [
-  {
-    id: "user-admin-1",
-    email: "lead-admin@patchwise.internal",
-    name: "System Admin (Lead)",
-    picture: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
-    role: "admin",
-    authProvider: "demo",
-    lastLoginAt: Date.now(),
-    createdAt: Date.now() - 86400000 * 30,
-  },
-  {
-    id: "user-admin-2",
-    email: "admin@patchwise.internal",
-    name: "Alex Vance (Security Admin)",
-    picture: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
-    role: "admin",
-    authProvider: "demo",
-    lastLoginAt: Date.now() - 3600000,
-    createdAt: Date.now() - 86400000 * 15,
-  },
   {
     id: "user-dev-1",
     email: "developer@patchwise.internal",
@@ -130,7 +108,22 @@ export function getUserRegistry(): UserProfile[] {
       return DEMO_USERS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : DEMO_USERS;
+    if (Array.isArray(parsed)) {
+      // Cleanse any old default admin accounts from storage
+      const sanitized = parsed.filter(
+        (u) =>
+          u.id !== "user-admin-1" &&
+          u.id !== "user-admin-2" &&
+          u.email !== "lead-admin@patchwise.internal" &&
+          u.email !== "admin@patchwise.internal" &&
+          u.email !== "security-lead@patchwise.internal"
+      );
+      if (sanitized.length !== parsed.length) {
+        localStorage.setItem(USER_REGISTRY_KEY, JSON.stringify(sanitized));
+      }
+      return sanitized.length > 0 ? sanitized : DEMO_USERS;
+    }
+    return DEMO_USERS;
   } catch (e) {
     console.error("Error reading user registry:", e);
     return DEMO_USERS;
@@ -278,6 +271,13 @@ export function getStoredSession(): AuthSession | null {
     const freshUser = users.find((u) => u.email.toLowerCase() === session.user.email.toLowerCase());
     if (freshUser) {
       session.user = freshUser;
+    } else if (
+      session.user.id === "user-admin-1" ||
+      session.user.id === "user-admin-2" ||
+      session.user.email.includes("admin@patchwise.internal")
+    ) {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+      return null;
     }
     return session;
   } catch (e) {

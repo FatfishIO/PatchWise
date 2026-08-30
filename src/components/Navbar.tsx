@@ -135,7 +135,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Quick Role Simulator Pill (Allows testing perspective changes) */}
+          {/* Quick Role Simulator Pill (Only allows USER and VIEWER for trials; ADMIN if verified admin) */}
           {onSwitchRole && (
             <div className="hidden lg:flex items-center gap-1 bg-zinc-900/80 px-2 py-1 rounded-lg border border-zinc-800 text-xs">
               <Sliders className="w-3 h-3 text-zinc-500" />
@@ -146,7 +146,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="bg-transparent text-[11px] font-mono text-zinc-300 focus:outline-none cursor-pointer"
                 title="Mô phỏng chuyển đổi vai trò (Role Simulation)"
               >
-                <option value="admin" className="bg-zinc-900 text-indigo-300">ADMIN</option>
+                {currentUser.role === "admin" && (
+                  <option value="admin" className="bg-zinc-900 text-indigo-300">ADMIN</option>
+                )}
                 <option value="user" className="bg-zinc-900 text-emerald-300">USER</option>
                 <option value="viewer" className="bg-zinc-900 text-amber-300">VIEWER</option>
               </select>

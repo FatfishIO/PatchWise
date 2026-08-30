@@ -80,11 +80,19 @@ export interface SampleGitHubUrl {
 export const SAMPLE_GITHUB_URLS: SampleGitHubUrl[] = [
   {
     id: "linux-kernel-commit",
-    name: "Linux Kernel - Torvalds Patch / Commit",
+    name: "Linux Kernel - Buffer Overflow Fix Commit",
     type: "commit",
-    url: "https://github.com/torvalds/linux/commit/8039e73d96395ab0f2719e6c20422fb47a80030f",
-    description: "Linux Kernel Memory Management & Core Driver Security Patch",
-    tag: "Linux / Kernel",
+    url: "https://github.com/torvalds/linux/commit/d00d8da5869a2608e97cfede094dfc5e11462a46",
+    description: "Linux Kernel Classic Buffer Overflow & Size Checking Fix",
+    tag: "Linux / Security",
+  },
+  {
+    id: "linux-repo-latest",
+    name: "Linux Kernel - Latest Commit from Repo",
+    type: "repo",
+    url: "https://github.com/torvalds/linux",
+    description: "Tự động lấy Commit mới nhất từ nhánh chính của kho lưu trữ Torvalds Linux",
+    tag: "Linux / Latest",
   },
   {
     id: "vite-import-fix-pr",

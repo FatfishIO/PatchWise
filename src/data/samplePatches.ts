@@ -2,6 +2,57 @@ import { SamplePatch } from "../types";
 
 export const SAMPLE_PATCHES: SamplePatch[] = [
   {
+    id: "sample-xss-java-servlet",
+    title: "Vá lỗ hổng XSS (Reflected Cross-Site Scripting) trong Java CommentServlet",
+    description: "Khắc phục lỗ hổng XSS do in trực tiếp tham số người dùng (userName, comment) ra HTML bằng cách mã hóa dữ liệu đầu vào qua ESAPI / StringEscapeUtils",
+    tag: "Security Patch",
+    riskHint: "HIGH",
+    diff: `diff --git a/src/main/java/com/example/CommentServlet.java b/src/main/java/com/example/CommentServlet.java
+index a19f032..c87e914 100644
+--- a/src/main/java/com/example/CommentServlet.java
++++ b/src/main/java/com/example/CommentServlet.java
+@@ -1,25 +1,30 @@
+ package com.example;
+ 
+ import java.io.IOException;
+ import java.io.PrintWriter;
+ import javax.servlet.ServletException;
+ import javax.servlet.http.HttpServlet;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
++import org.apache.commons.text.StringEscapeUtils;
+ 
+ public class CommentServlet extends HttpServlet {
+     
+     protected void doGet(HttpServletRequest request, HttpServletResponse response) 
+             throws ServletException, IOException {
+         
+         // Lấy tham số từ URL: http://example.com/comment?name=John&msg=Hello
+         String userName = request.getParameter("name");
+         String comment = request.getParameter("msg");
+         
+         response.setContentType("text/html; charset=UTF-8");
+         PrintWriter out = response.getWriter();
+         
+         out.println("<html>");
+         out.println("<head><title>Comment Page</title></head>");
+         out.println("<body>");
+         out.println("<h1>User Comments</h1>");
+         
+-        // LỖ HỔNG XSS: Dữ liệu đầu vào từ người dùng được in trực tiếp ra HTML mà KHÔNG được mã hóa
+-        out.println("<p><b>User:</b> " + userName + "</p>");
+-        out.println("<p><b>Comment:</b> " + comment + "</p>"); 
++        // ĐÃ VÁ LỖ HỔNG XSS: Mã hóa toàn bộ HTML Entities trước khi render ra phản hồi
++        String safeUserName = userName != null ? StringEscapeUtils.escapeHtml4(userName) : "Anonymous";
++        String safeComment = comment != null ? StringEscapeUtils.escapeHtml4(comment) : "";
++        out.println("<p><b>User:</b> " + safeUserName + "</p>");
++        out.println("<p><b>Comment:</b> " + safeComment + "</p>");
+         out.println("</body>");
+         out.println("</html>");
+     }
+ }`,
+  },
+  {
     id: "sample-security-fix",
     title: "Vá lỗ hổng SQL Injection & Nâng cấp Mật khẩu",
     description: "Sửa lỗi bảo mật truy vấn thô và nâng cấp cơ chế băm mật khẩu từ MD5 sang Argon2id",
