@@ -68,7 +68,7 @@ export interface SamplePatch {
 }
 
 export interface GitHubDiffMetadata {
-  type: "pull" | "compare" | "commit" | "unknown";
+  type: "pull" | "compare" | "commit" | "repo" | "unknown";
   owner?: string;
   repo?: string;
   title?: string;
@@ -84,7 +84,7 @@ export interface GitHubDiffMetadata {
 export type InputMode = "github-url" | "github-range" | "manual";
 
 export interface GitHubUrlParsed {
-  type: "pull" | "compare" | "commit" | "unknown";
+  type: "pull" | "compare" | "commit" | "repo" | "unknown";
   owner?: string;
   repo?: string;
   prNumber?: string;

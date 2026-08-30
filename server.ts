@@ -163,8 +163,44 @@ function getGitHubHeaders(customToken?: string) {
   return headers;
 }
 
+// ==========================================
+// RBAC & API Authorization Middleware
+// ==========================================
+type Role = "admin" | "user" | "viewer";
+
+const PREDEFINED_ADMIN_EMAILS = [
+  "minhhoangdo3107@gmail.com",
+  "admin@patchwise.internal",
+  "security-lead@patchwise.internal",
+  "admin@patchwise.dev",
+];
+
+function requireRole(allowedRoles: Role[]) {
+  return (req: any, res: express.Response, next: express.NextFunction) => {
+    const rawRole = (req.headers["x-user-role"] as string)?.toLowerCase();
+    const userEmail = (req.headers["x-user-email"] as string)?.toLowerCase().trim();
+
+    // Check if user is a designated administrator
+    const isAdminEmail = userEmail && PREDEFINED_ADMIN_EMAILS.some((e) => e.toLowerCase() === userEmail);
+    const effectiveRole: Role = isAdminEmail ? "admin" : (rawRole as Role) || "user";
+
+    if (!allowedRoles.includes(effectiveRole)) {
+      return res.status(403).json({
+        error: `Truy cập bị từ chối (403 Forbidden). Vai trò [${effectiveRole.toUpperCase()}] không có quyền thực hiện thao tác này. Quyền yêu cầu: ${allowedRoles.map((r) => r.toUpperCase()).join(", ")}`,
+        code: "PERMISSION_DENIED",
+        currentRole: effectiveRole,
+        requiredRoles: allowedRoles,
+      });
+    }
+
+    req.userRole = effectiveRole;
+    req.userEmail = userEmail;
+    next();
+  };
+}
+
 // API Route: Fetch Diff directly from GitHub (PR, Compare, or Commit)
-app.post("/api/github/fetch-diff", async (req, res) => {
+app.post("/api/github/fetch-diff", requireRole(["admin", "user"]), async (req, res) => {
   try {
     const { url, owner, repo, pullNumber, base, head, commitSha, token } = req.body;
 
@@ -174,7 +210,7 @@ app.post("/api/github/fetch-diff", async (req, res) => {
     let targetBase = base;
     let targetHead = head;
     let targetCommit = commitSha;
-    let detectedType: "pull" | "compare" | "commit" | "unknown" = "unknown";
+    let detectedType: "pull" | "compare" | "commit" | "repo" | "unknown" = "unknown";
 
     // 1. If URL is provided, parse it
     if (url && typeof url === "string" && url.trim()) {
@@ -188,6 +224,9 @@ app.post("/api/github/fetch-diff", async (req, res) => {
       );
       const commitMatch = trimmed.match(
         /^https?:\/\/github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\/commit\/([a-f0-9]{5,40})/i
+      );
+      const repoMatch = trimmed.match(
+        /^https?:\/\/github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\/?$/i
       );
 
       if (prMatch) {
@@ -206,9 +245,13 @@ app.post("/api/github/fetch-diff", async (req, res) => {
         targetOwner = commitMatch[1];
         targetRepo = commitMatch[2];
         targetCommit = commitMatch[3];
+      } else if (repoMatch && !["pull", "compare", "commit", "issues", "releases", "tags"].includes(repoMatch[2].toLowerCase())) {
+        detectedType = "repo";
+        targetOwner = repoMatch[1];
+        targetRepo = repoMatch[2];
       } else {
         return res.status(400).json({
-          error: "Không nhận diện được định dạng GitHub URL hợp lệ. Vui lòng kiểm tra lại đường dẫn PR, Compare hoặc Commit.",
+          error: "Không nhận diện được định dạng GitHub URL hợp lệ. Vui lòng kiểm tra lại đường dẫn PR, Compare, Commit hoặc Repo (ví dụ: https://github.com/torvalds/linux/commit/...).",
         });
       }
     } else if (targetOwner && targetRepo) {
@@ -235,6 +278,37 @@ app.post("/api/github/fetch-diff", async (req, res) => {
       repo: targetRepo,
       url: url || `https://github.com/${targetOwner}/${targetRepo}`,
     };
+
+    // If repository root was provided, fetch the latest commit from the default branch
+    if (detectedType === "repo") {
+      try {
+        const commitsRes = await fetch(
+          `https://api.github.com/repos/${targetOwner}/${targetRepo}/commits?per_page=1`,
+          { headers: { ...headers, Accept: "application/vnd.github.v3+json" } }
+        );
+        if (commitsRes.ok) {
+          const commitsList = await commitsRes.json();
+          if (Array.isArray(commitsList) && commitsList.length > 0) {
+            const latest = commitsList[0];
+            targetCommit = latest.sha;
+            detectedType = "commit";
+            metadata.commitSha = latest.sha;
+            metadata.title = `[Latest Commit] ${latest.commit?.message?.split("\n")[0] || ""}`;
+            metadata.author = latest.author?.login || latest.commit?.author?.name;
+            metadata.url = latest.html_url;
+            metadata.isLatestFromRepo = true;
+          }
+        }
+      } catch (err) {
+        console.warn("Could not auto-fetch latest commit for repo:", err);
+      }
+
+      if (!targetCommit) {
+        return res.status(400).json({
+          error: `Đây là đường dẫn trang chủ Repository (${targetOwner}/${targetRepo}). Bạn vui lòng nhập link Commit cụ thể (ví dụ: https://github.com/${targetOwner}/${targetRepo}/commit/<sha>) hoặc Pull Request để phân tích bản vá.`,
+        });
+      }
+    }
 
     if (detectedType === "pull") {
       diffApiUrl = `https://api.github.com/repos/${targetOwner}/${targetRepo}/pulls/${targetPR}`;
@@ -334,7 +408,7 @@ app.post("/api/github/fetch-diff", async (req, res) => {
 
 
 // Diff analysis endpoint
-app.post("/api/analyze-diff", async (req, res) => {
+app.post("/api/analyze-diff", requireRole(["admin", "user"]), async (req, res) => {
   try {
     const { diffContent, language = "vi", focusArea = "all" } = req.body;
 
@@ -556,7 +630,7 @@ Trọng tâm bổ sung: ${focusArea === "security" ? "Tập trung sâu vào khí
 });
 
 // Follow-up Q&A endpoint
-app.post("/api/diff-chat", async (req, res) => {
+app.post("/api/diff-chat", requireRole(["admin", "user"]), async (req, res) => {
   try {
     const { diffContent, question, previousAnalysis, chatHistory = [] } = req.body;
 
@@ -875,12 +949,12 @@ Trả về JSON chuẩn DiffAnalysisResult.`;
 });
 
 // List all registered webhooks
-app.get("/api/webhook/list", (_req, res) => {
+app.get("/api/webhook/list", requireRole(["admin"]), (_req, res) => {
   res.json({ webhooks: webhooksStore });
 });
 
 // Register new webhook
-app.post("/api/webhook/register", async (req, res) => {
+app.post("/api/webhook/register", requireRole(["admin"]), async (req, res) => {
   try {
     const { repoUrl, autoComment = true } = req.body;
     if (!repoUrl || typeof repoUrl !== "string") {
@@ -922,7 +996,7 @@ app.post("/api/webhook/register", async (req, res) => {
 });
 
 // Delete webhook
-app.delete("/api/webhook/:id", (req, res) => {
+app.delete("/api/webhook/:id", requireRole(["admin"]), (req, res) => {
   const { id } = req.params;
   const index = webhooksStore.findIndex((w) => w.id === id);
   if (index === -1) {
@@ -933,7 +1007,7 @@ app.delete("/api/webhook/:id", (req, res) => {
 });
 
 // Toggle webhook active/comment state
-app.patch("/api/webhook/:id/toggle", (req, res) => {
+app.patch("/api/webhook/:id/toggle", requireRole(["admin"]), (req, res) => {
   const { id } = req.params;
   const { isActive, autoComment } = req.body;
   const webhook = webhooksStore.find((w) => w.id === id);
@@ -946,7 +1020,7 @@ app.patch("/api/webhook/:id/toggle", (req, res) => {
 });
 
 // Test trigger simulation
-app.post("/api/webhook/test-trigger", async (req: any, res) => {
+app.post("/api/webhook/test-trigger", requireRole(["admin"]), async (req: any, res) => {
   try {
     const { webhookId, prNumber = 105, prTitle = "feat(auth): add OAuth2 multi-factor verification" } = req.body;
     const webhook = webhooksStore.find((w) => w.id === webhookId) || webhooksStore[0];
@@ -1003,7 +1077,7 @@ app.post("/api/webhook/test-trigger", async (req: any, res) => {
 });
 
 // Get webhook logs
-app.get("/api/webhook/logs", (_req, res) => {
+app.get("/api/webhook/logs", requireRole(["admin"]), (_req, res) => {
   res.json({ logs: webhookLogsStore });
 });
 
@@ -1011,7 +1085,7 @@ app.get("/api/webhook/logs", (_req, res) => {
 // 2. Admin Usage Analytics Endpoints
 // ==========================================
 
-app.get("/api/admin/analytics/overview", (_req, res) => {
+app.get("/api/admin/analytics/overview", requireRole(["admin"]), (_req, res) => {
   const avgDuration =
     analysisDurationHistory.reduce((acc, v) => acc + v, 0) / (analysisDurationHistory.length || 1);
 
@@ -1025,7 +1099,7 @@ app.get("/api/admin/analytics/overview", (_req, res) => {
   });
 });
 
-app.get("/api/admin/analytics/trends", (req, res) => {
+app.get("/api/admin/analytics/trends", requireRole(["admin"]), (req, res) => {
   const period = (req.query.period as string) || "30d";
   const days = period === "7d" ? 7 : period === "90d" ? 90 : 30;
 
@@ -1051,7 +1125,7 @@ app.get("/api/admin/analytics/trends", (req, res) => {
   res.json({ trends: points, period });
 });
 
-app.get("/api/admin/analytics/top-users", (_req, res) => {
+app.get("/api/admin/analytics/top-users", requireRole(["admin"]), (_req, res) => {
   const topUsers = [
     {
       email: "security.lead@patchwise.internal",
@@ -1094,7 +1168,7 @@ app.get("/api/admin/analytics/top-users", (_req, res) => {
   res.json({ top_users: topUsers });
 });
 
-app.get("/api/admin/analytics/risk-distribution", (_req, res) => {
+app.get("/api/admin/analytics/risk-distribution", requireRole(["admin"]), (_req, res) => {
   res.json({
     distribution: [
       { name: "CRITICAL (9-10)", count: 6, percentage: 7, color: "#f43f5e" },
@@ -1105,7 +1179,7 @@ app.get("/api/admin/analytics/risk-distribution", (_req, res) => {
   });
 });
 
-app.get("/api/admin/analytics/repo-stats", (_req, res) => {
+app.get("/api/admin/analytics/repo-stats", requireRole(["admin"]), (_req, res) => {
   res.json({
     repositories: [
       {
@@ -1137,7 +1211,7 @@ app.get("/api/admin/analytics/repo-stats", (_req, res) => {
 // 3. AI Streaming Response Endpoint (SSE)
 // ==========================================
 
-app.post("/api/analyze/stream", async (req, res) => {
+app.post("/api/analyze/stream", requireRole(["admin", "user"]), async (req, res) => {
   const { diffContent, language = "vi", focusArea = "all" } = req.body;
 
   if (!diffContent || typeof diffContent !== "string") {
@@ -1232,7 +1306,7 @@ Trọng tâm: ${focusArea}. Ngôn ngữ: ${language === "en" ? "English" : "Ti�
 // 4. Auto-Fix Suggestion Endpoint
 // ==========================================
 
-app.post("/api/analyze/fix-suggestion", async (req, res) => {
+app.post("/api/analyze/fix-suggestion", requireRole(["admin", "user"]), async (req, res) => {
   try {
     const { diffContent, category, description, vulnerabilityType, language = "vi" } = req.body;
 
@@ -1294,7 +1368,7 @@ Hãy tạo bản vá sửa lỗi an toàn, code sạch, tối ưu hiệu năng. 
 // 5. Compare PRs / Range Diff Analysis Endpoint
 // ==========================================
 
-app.post("/api/compare/pr-analysis", async (req, res) => {
+app.post("/api/compare/pr-analysis", requireRole(["admin", "user"]), async (req, res) => {
   try {
     const { prA, prB, language = "vi" } = req.body;
 

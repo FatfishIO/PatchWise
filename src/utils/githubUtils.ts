@@ -49,6 +49,19 @@ export function parseGitHubUrl(url: string): GitHubUrlParsed {
     };
   }
 
+  // Repository root URL: https://github.com/owner/repo (or with trailing slash)
+  const repoMatch = trimmed.match(
+    /^https?:\/\/github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\/?$/i
+  );
+  if (repoMatch && !["pull", "compare", "commit", "issues", "releases", "tags"].includes(repoMatch[2].toLowerCase())) {
+    return {
+      type: "repo",
+      owner: repoMatch[1],
+      repo: repoMatch[2],
+      rawUrl: trimmed,
+    };
+  }
+
   return {
     type: "unknown",
     rawUrl: trimmed,
@@ -58,13 +71,21 @@ export function parseGitHubUrl(url: string): GitHubUrlParsed {
 export interface SampleGitHubUrl {
   id: string;
   name: string;
-  type: "pull" | "compare" | "commit";
+  type: "pull" | "compare" | "commit" | "repo";
   url: string;
   description: string;
   tag: string;
 }
 
 export const SAMPLE_GITHUB_URLS: SampleGitHubUrl[] = [
+  {
+    id: "linux-kernel-commit",
+    name: "Linux Kernel - Torvalds Patch / Commit",
+    type: "commit",
+    url: "https://github.com/torvalds/linux/commit/8039e73d96395ab0f2719e6c20422fb47a80030f",
+    description: "Linux Kernel Memory Management & Core Driver Security Patch",
+    tag: "Linux / Kernel",
+  },
   {
     id: "vite-import-fix-pr",
     name: "Vite PR #15000 - CSS @import Resolver Fix",

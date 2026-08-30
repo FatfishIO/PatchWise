@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { FixSuggestionModal } from "./FixSuggestionModal";
 import { ReportPdfModal } from "./ReportPdfModal";
+import { getAuthHeaders } from "../utils/authUtils";
 
 interface AnalysisResultsProps {
   analysis: DiffAnalysisResult;
@@ -81,7 +82,7 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
     try {
       const res = await fetch("/api/analyze/fix-suggestion", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           riskDescription: risk.description,
           riskCategory: risk.category,

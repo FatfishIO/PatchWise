@@ -12,6 +12,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { HistoryItem, RiskLevel, PRComparisonAnalysis } from "../types";
+import { getAuthHeaders } from "../utils/authUtils";
 
 interface CompareViewModalProps {
   isOpen: boolean;
@@ -48,7 +49,7 @@ export const CompareViewModal: React.FC<CompareViewModalProps> = ({
     try {
       const res = await fetch("/api/compare/pr-analysis", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           prA: {
             title: itemA.title,

@@ -23,6 +23,7 @@ import {
   clearSession,
   canUserPerformAction,
   updateUserRole,
+  getAuthHeaders,
 } from "./utils/authUtils";
 import {
   AlertCircle,
@@ -147,7 +148,7 @@ export default function App() {
     try {
       const response = await fetch("/api/analyze-diff", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           diffContent,
           language,

@@ -24,6 +24,7 @@ import {
   recordUserLogin,
   saveSession,
   GOOGLE_CLIENT_ID_KEY,
+  DEFAULT_GOOGLE_CLIENT_ID,
   determineRoleForEmail,
   PREDEFINED_ADMIN_EMAILS,
 } from "../utils/authUtils";
@@ -42,13 +43,13 @@ declare global {
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, language }) => {
   const [googleClientId, setGoogleClientId] = useState<string>(() => {
     try {
-      return (
-        localStorage.getItem(GOOGLE_CLIENT_ID_KEY) ||
-        // Public demo client ID placeholder
-        "791289569627-demo-client-id.apps.googleusercontent.com"
-      );
+      const saved = localStorage.getItem(GOOGLE_CLIENT_ID_KEY);
+      if (saved && !saved.includes("demo-client-id")) {
+        return saved;
+      }
+      return DEFAULT_GOOGLE_CLIENT_ID;
     } catch {
-      return "";
+      return DEFAULT_GOOGLE_CLIENT_ID;
     }
   });
 
@@ -58,6 +59,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
   const [customRole, setCustomRole] = useState<UserRole>("user");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [gisLoaded, setGisLoaded] = useState<boolean>(false);
+  const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
 
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
@@ -137,6 +139,70 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
     } catch (e: any) {
       console.error("Google sign in error:", e);
       setErrorMsg(e?.message || "Lỗi xác thực Google Identity Services");
+    }
+  };
+
+  // Direct Google OAuth Popup Flow (initTokenClient)
+  const handleGooglePopupSignIn = () => {
+    setErrorMsg(null);
+    setIsAuthenticating(true);
+
+    try {
+      if (window.google?.accounts?.oauth2) {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: "openid email profile",
+          callback: async (tokenResponse: any) => {
+            setIsAuthenticating(false);
+            if (tokenResponse?.error) {
+              setErrorMsg(
+                language === "vi"
+                  ? `Google OAuth: ${tokenResponse.error_description || tokenResponse.error}`
+                  : `Google OAuth Error: ${tokenResponse.error}`
+              );
+              return;
+            }
+            if (tokenResponse?.access_token) {
+              try {
+                const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+                  headers: {
+                    Authorization: `Bearer ${tokenResponse.access_token}`,
+                  },
+                });
+                if (res.ok) {
+                  const userInfo = await res.json();
+                  const userProfile: Partial<UserProfile> & { email: string; name: string } = {
+                    sub: userInfo.sub,
+                    email: userInfo.email,
+                    name: userInfo.name || userInfo.email.split("@")[0],
+                    picture: userInfo.picture,
+                    authProvider: "google",
+                  };
+                  const user = recordUserLogin(userProfile);
+                  saveSession(user, tokenResponse.access_token);
+                  onLoginSuccess(user);
+                  return;
+                }
+              } catch (err: any) {
+                console.error("Error fetching userinfo from Google:", err);
+                setErrorMsg("Không thể lấy thông tin tài khoản Google.");
+              }
+            }
+          },
+        });
+        client.requestAccessToken();
+      } else {
+        setIsAuthenticating(false);
+        setErrorMsg(
+          language === "vi"
+            ? "Google OAuth SDK đang được tải, vui lòng thử lại sau vài giây."
+            : "Google OAuth SDK is still loading."
+        );
+      }
+    } catch (err: any) {
+      setIsAuthenticating(false);
+      console.error("OAuth popup error:", err);
+      setErrorMsg(err?.message || "Lỗi khởi chạy Google OAuth Popup");
     }
   };
 
@@ -322,24 +388,57 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, langua
                 </div>
               )}
 
-              {/* Primary: Google Identity Services (GIS) Button */}
+              {/* Primary: Google Identity Services (GIS) / OAuth 2.0 Button */}
               <div className="space-y-3 pt-1">
-                <label className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase block text-center sm:text-left">
-                  Đăng nhập chính thức (Google OAuth 2.0)
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase block">
+                    Đăng nhập Google OAuth 2.0
+                  </label>
+                  <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded-full">
+                    Client ID Configured
+                  </span>
+                </div>
 
-                <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80 min-h-[70px]">
+                <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80 gap-3">
+                  {/* GIS Rendered Button */}
                   <div
                     id="g_id_signin"
                     ref={googleBtnRef}
                     className="flex items-center justify-center min-w-[280px]"
                   />
-                  {!gisLoaded && (
-                    <p className="text-[11px] text-zinc-500 mt-2 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
-                      <span>Đang tải Google Identity Services...</span>
-                    </p>
-                  )}
+
+                  {/* Direct Popup OAuth Button */}
+                  <button
+                    id="btn-google-popup-login"
+                    type="button"
+                    onClick={handleGooglePopupSignIn}
+                    disabled={isAuthenticating}
+                    className="w-full max-w-[320px] flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-medium text-xs shadow-md hover:shadow-lg transition-all cursor-pointer border border-zinc-200 disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                    <span>
+                      {isAuthenticating
+                        ? "Đang xác thực tài khoản..."
+                        : "Đăng nhập với Google Popup"}
+                    </span>
+                  </button>
                 </div>
               </div>
 

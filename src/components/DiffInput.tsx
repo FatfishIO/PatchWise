@@ -29,7 +29,7 @@ import {
 import { DiffStats, SamplePatch, GitHubDiffMetadata, InputMode, UserProfile } from "../types";
 import { SAMPLE_PATCHES } from "../data/samplePatches";
 import { parseGitHubUrl, SAMPLE_GITHUB_URLS, SampleGitHubUrl } from "../utils/githubUtils";
-import { canUserPerformAction } from "../utils/authUtils";
+import { canUserPerformAction, getAuthHeaders } from "../utils/authUtils";
 
 interface DiffInputProps {
   currentUser?: UserProfile;
@@ -104,7 +104,7 @@ export const DiffInput: React.FC<DiffInputProps> = ({
     try {
       const response = await fetch("/api/github/fetch-diff", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           url: urlToFetch,
           token: githubToken,
@@ -166,7 +166,7 @@ export const DiffInput: React.FC<DiffInputProps> = ({
 
       const response = await fetch("/api/github/fetch-diff", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 

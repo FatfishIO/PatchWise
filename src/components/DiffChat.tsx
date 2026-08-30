@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { MessageSquare, Send, Sparkles, Bot, User, CornerDownLeft, Shield } from "lucide-react";
 import { ChatMessage, DiffAnalysisResult, UserProfile } from "../types";
-import { canUserPerformAction } from "../utils/authUtils";
+import { canUserPerformAction, getAuthHeaders } from "../utils/authUtils";
 
 interface DiffChatProps {
   currentUser?: UserProfile;
@@ -51,7 +51,7 @@ export const DiffChat: React.FC<DiffChatProps> = ({ currentUser, diffContent, pr
     try {
       const res = await fetch("/api/diff-chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           diffContent,
           question: q,

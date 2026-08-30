@@ -5,10 +5,13 @@ import {
   RiskDistributionItem,
   RepoStatItem,
 } from "../types";
+import { getAuthHeaders } from "./authUtils";
 
 export async function fetchAnalyticsOverview(): Promise<AnalyticsOverview> {
   try {
-    const res = await fetch("/api/admin/analytics/overview");
+    const res = await fetch("/api/admin/analytics/overview", {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error("Failed to load overview analytics");
     return await res.json();
   } catch (e) {
@@ -25,7 +28,9 @@ export async function fetchAnalyticsOverview(): Promise<AnalyticsOverview> {
 
 export async function fetchAnalyticsTrends(period: "7d" | "30d" | "90d" = "30d"): Promise<TrendDataPoint[]> {
   try {
-    const res = await fetch(`/api/admin/analytics/trends?period=${period}`);
+    const res = await fetch(`/api/admin/analytics/trends?period=${period}`, {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error("Failed to load trends");
     const data = await res.json();
     return data.trends || [];
@@ -36,7 +41,9 @@ export async function fetchAnalyticsTrends(period: "7d" | "30d" | "90d" = "30d")
 
 export async function fetchTopUsers(): Promise<TopUserStat[]> {
   try {
-    const res = await fetch("/api/admin/analytics/top-users");
+    const res = await fetch("/api/admin/analytics/top-users", {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error("Failed to load top users");
     const data = await res.json();
     return data.top_users || [];
@@ -47,7 +54,9 @@ export async function fetchTopUsers(): Promise<TopUserStat[]> {
 
 export async function fetchRiskDistribution(): Promise<RiskDistributionItem[]> {
   try {
-    const res = await fetch("/api/admin/analytics/risk-distribution");
+    const res = await fetch("/api/admin/analytics/risk-distribution", {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error("Failed to load risk distribution");
     const data = await res.json();
     return data.distribution || [];
@@ -58,7 +67,9 @@ export async function fetchRiskDistribution(): Promise<RiskDistributionItem[]> {
 
 export async function fetchRepoStats(): Promise<RepoStatItem[]> {
   try {
-    const res = await fetch("/api/admin/analytics/repo-stats");
+    const res = await fetch("/api/admin/analytics/repo-stats", {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error("Failed to load repo stats");
     const data = await res.json();
     return data.repositories || [];

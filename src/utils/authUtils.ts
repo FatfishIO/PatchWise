@@ -4,9 +4,11 @@ export const SESSION_STORAGE_KEY = "patchwise_auth_session";
 export const USER_REGISTRY_KEY = "patchwise_user_registry";
 export const AUDIT_LOGS_KEY = "patchwise_audit_logs";
 export const GOOGLE_CLIENT_ID_KEY = "patchwise_google_client_id";
+export const DEFAULT_GOOGLE_CLIENT_ID = "438350877870-edrdshm63p5atqp71un13ua6a04iml4l.apps.googleusercontent.com";
 
-// Predefined Admin Emails (Generic mock accounts only)
+// Predefined Admin Emails (Automatically granted Admin role)
 export const PREDEFINED_ADMIN_EMAILS: string[] = [
+  "minhhoangdo3107@gmail.com",
   "admin@patchwise.internal",
   "security-lead@patchwise.internal",
 ];
@@ -309,4 +311,22 @@ export function clearSession(): void {
   } catch (e) {
     console.error("Failed to clear session:", e);
   }
+}
+
+/**
+ * Get HTTP headers with RBAC authentication metadata for API calls
+ */
+export function getAuthHeaders(): Record<string, string> {
+  const session = getStoredSession();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (session?.user) {
+    headers["x-user-role"] = session.user.role;
+    headers["x-user-email"] = session.user.email;
+    if (session.token) {
+      headers["Authorization"] = `Bearer ${session.token}`;
+    }
+  }
+  return headers;
 }

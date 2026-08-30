@@ -1,8 +1,11 @@
 import { WebhookConfig, WebhookLog } from "../types";
+import { getAuthHeaders } from "./authUtils";
 
 export async function fetchWebhooksList(): Promise<WebhookConfig[]> {
   try {
-    const res = await fetch("/api/webhook/list");
+    const res = await fetch("/api/webhook/list", {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error("Không thể tải danh sách webhooks.");
     const data = await res.json();
     return data.webhooks || [];
@@ -19,7 +22,7 @@ export async function registerNewWebhook(
   try {
     const res = await fetch("/api/webhook/register", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ repoUrl, autoComment }),
     });
     const data = await res.json();
@@ -40,6 +43,7 @@ export async function deleteWebhook(id: string): Promise<boolean> {
   try {
     const res = await fetch(`/api/webhook/${encodeURIComponent(id)}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
     });
     return res.ok;
   } catch (err) {
@@ -55,7 +59,7 @@ export async function toggleWebhookSetting(
   try {
     const res = await fetch(`/api/webhook/${encodeURIComponent(id)}/toggle`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify(options),
     });
     return res.ok;
@@ -73,7 +77,7 @@ export async function triggerTestWebhook(
   try {
     const res = await fetch("/api/webhook/test-trigger", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ webhookId, prNumber, prTitle }),
     });
     const data = await res.json();
@@ -86,7 +90,9 @@ export async function triggerTestWebhook(
 
 export async function fetchWebhookLogs(): Promise<WebhookLog[]> {
   try {
-    const res = await fetch("/api/webhook/logs");
+    const res = await fetch("/api/webhook/logs", {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) return [];
     const data = await res.json();
     return data.logs || [];
