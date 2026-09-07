@@ -6,10 +6,13 @@ export const AUDIT_LOGS_KEY = "patchwise_audit_logs";
 export const GOOGLE_CLIENT_ID_KEY = "patchwise_google_client_id";
 export const DEFAULT_GOOGLE_CLIENT_ID = "438350877870-edrdshm63p5atqp71un13ua6a04iml4l.apps.googleusercontent.com";
 
-// Predefined Admin Emails (Automatically granted Admin role)
-export const PREDEFINED_ADMIN_EMAILS: string[] = [
-  "minhhoangdo3107@gmail.com",
-];
+// Predefined Admin Emails (Configurable via VITE_ADMIN_EMAILS or generic internal admins, no personal emails hardcoded)
+export const PREDEFINED_ADMIN_EMAILS: string[] = (
+  ((import.meta as any).env?.VITE_ADMIN_EMAILS as string) || "admin@patchwise.internal,lead-admin@patchwise.internal"
+)
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
 
 // Demo accounts for rapid testing & evaluation (Trial only allowed for USER and VIEWER roles)
 export const DEMO_USERS: UserProfile[] = [

@@ -163,6 +163,73 @@ let totalTokensUsed = 142050;
 let totalCostAccumulated = 0.284;
 const analysisDurationHistory: number[] = [1200, 1450, 1100, 1800, 1350, 1250];
 
+// Robust JSON Repair & Parser for LLM responses
+function safeParseJSON(raw: string, fallbackDefault: any = {}): any {
+  if (!raw || typeof raw !== "string") return fallbackDefault;
+  const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  
+  // 1. First attempt: standard JSON.parse
+  try {
+    return JSON.parse(cleaned);
+  } catch (initialErr: any) {
+    console.warn("Standard JSON.parse failed, attempting auto-repair...", initialErr?.message);
+  }
+
+  // 2. Second attempt: Auto-repair truncated strings and brackets
+  try {
+    let text = cleaned;
+    // Strip trailing dangling backslashes
+    text = text.replace(/\\+$/, "");
+
+    let inString = false;
+    let escaped = false;
+    const stack: string[] = [];
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === "{" || char === "[") {
+          stack.push(char);
+        } else if (char === "}") {
+          if (stack.length > 0 && stack[stack.length - 1] === "{") stack.pop();
+        } else if (char === "]") {
+          if (stack.length > 0 && stack[stack.length - 1] === "[") stack.pop();
+        }
+      }
+    }
+
+    if (inString) {
+      text += '"';
+    }
+
+    // Close remaining open objects and arrays in reverse order
+    while (stack.length > 0) {
+      const last = stack.pop();
+      if (last === "{") text += "}";
+      else if (last === "[") text += "]";
+    }
+
+    return JSON.parse(text);
+  } catch (repairErr: any) {
+    console.error("Auto-repair JSON also failed:", repairErr?.message);
+    throw new Error(
+      `Phản hồi từ AI quá dài hoặc bị ngắt quãng giữa chừng (${repairErr?.message || "Unterminated JSON"}). Vui lòng thử lại với đoạn diff ngắn hơn hoặc chia nhỏ file.`
+    );
+  }
+}
+
 // Health check endpoint
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -189,9 +256,13 @@ function getGitHubHeaders(customToken?: string) {
 // ==========================================
 type Role = "admin" | "user" | "viewer";
 
-const PREDEFINED_ADMIN_EMAILS = [
-  "minhhoangdo3107@gmail.com",
-];
+// Predefined Admin Emails (Configurable via ADMIN_EMAILS environment variable)
+const PREDEFINED_ADMIN_EMAILS: string[] = (
+  process.env.ADMIN_EMAILS || "admin@patchwise.internal,lead-admin@patchwise.internal"
+)
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
 
 function requireRole(allowedRoles: Role[]) {
   return (req: any, res: express.Response, next: express.NextFunction) => {
@@ -680,8 +751,7 @@ ${languageRule}`;
       throw lastError || new Error("Không nhận được phản hồi từ AI model.");
     }
 
-    const cleanedText = rawText.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-    const parsedData = JSON.parse(cleanedText);
+    const parsedData = safeParseJSON(rawText);
     res.json(parsedData);
   } catch (error: any) {
     console.error("Diff Analysis Error:", error);
@@ -922,8 +992,7 @@ Trả về JSON chuẩn DiffAnalysisResult.`;
             temperature: 0.2,
           },
         });
-        const cleaned = (aiResponse.text || "{}").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-        analysisResult = JSON.parse(cleaned);
+        analysisResult = safeParseJSON(aiResponse.text || "{}");
       } catch (e: any) {
         console.error("[Webhook] Gemini analysis error:", e);
         analysisResult = {
@@ -1152,7 +1221,7 @@ app.get("/api/webhook/logs", requireRole(["admin"]), (_req, res) => {
 // 2. Admin Usage Analytics Endpoints
 // ==========================================
 
-app.get("/api/admin/analytics/overview", requireRole(["admin"]), (_req, res) => {
+app.get(["/api/admin/analytics", "/api/admin/analytics/overview"], requireRole(["admin"]), (_req, res) => {
   const avgDuration =
     analysisDurationHistory.reduce((acc, v) => acc + v, 0) / (analysisDurationHistory.length || 1);
 
@@ -1340,8 +1409,7 @@ Trọng tâm: ${focusArea}. Ngôn ngữ yêu cầu: ${language === "en" ? "100% 
       content: language === "vi" ? "Đang đánh giá rủi ro, lỗ hổng bảo mật và hồi quy..." : "Assessing risks and security...",
     });
 
-    const rawText = (response.text || "{}").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-    const parsedData = JSON.parse(rawText);
+    const parsedData = safeParseJSON(response.text || "{}");
 
     sendEvent("progress", {
       type: "test_cases",
@@ -1379,9 +1447,19 @@ Trọng tâm: ${focusArea}. Ngôn ngữ yêu cầu: ${language === "en" ? "100% 
 // 4. Auto-Fix Suggestion Endpoint
 // ==========================================
 
-app.post("/api/analyze/fix-suggestion", requireRole(["admin", "user"]), async (req, res) => {
+app.post(["/api/analyze/fix-suggestion", "/api/suggest-fix"], requireRole(["admin", "user"]), async (req, res) => {
   try {
-    const { diffContent, category, description, vulnerabilityType, language = "vi" } = req.body;
+    const {
+      diffContent,
+      category: directCat,
+      description: directDesc,
+      vulnerabilityType,
+      language = "vi",
+      risk,
+    } = req.body;
+
+    const category = risk?.category || directCat;
+    const description = risk?.description || directDesc;
 
     if (!description && !diffContent) {
       return res.status(400).json({ error: "Thiếu thông tin nguy cơ hoặc diffContent." });
@@ -1426,8 +1504,7 @@ Hãy tạo bản vá sửa lỗi an toàn, code sạch, tối ưu hiệu năng. 
       },
     });
 
-    const rawText = (response.text || "{}").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-    const parsed = JSON.parse(rawText);
+    const parsed = safeParseJSON(response.text || "{}");
 
     res.json({
       suggestion: {
@@ -1496,8 +1573,7 @@ Hãy đánh giá xem PR nào an toàn hơn để merge trước và chỉ ra cá
       },
     });
 
-    const rawText = (response.text || "{}").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-    const parsed = JSON.parse(rawText);
+    const parsed = safeParseJSON(response.text || "{}");
 
     res.json({ comparison: parsed });
   } catch (error: any) {
