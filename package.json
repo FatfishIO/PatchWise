@@ -1,5 +1,6 @@
 {
-  "name": "react-example",
+  "name": "patchwise-ai",
+  "description": "PatchWise AI - Smart Git Diff & Pull Request Security Intelligence",
   "private": true,
   "version": "0.0.0",
   "type": "module",
